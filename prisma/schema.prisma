@@ -15,6 +15,11 @@ model Tenant {
   users     User[]
 }
 
+enum Role {
+  ADMIN
+  MEMBER
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -23,6 +28,7 @@ model User {
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   createdAt DateTime @default(now())
+  role      Role     @default(MEMBER)
 
   @@index([tenantId])
 }
