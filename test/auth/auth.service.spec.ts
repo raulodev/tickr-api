@@ -3,8 +3,8 @@ import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthService } from './auth.service.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { AuthService } from '../../src/auth/auth.service.js';
+import { PrismaService } from '../../src/prisma/prisma.service.js';
 
 // Evita cargar el cliente real de Prisma en los tests
 vi.mock('../generated/prisma/client', () => ({

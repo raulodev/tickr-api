@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthController } from './auth.controller.js';
-import { AuthService } from './auth.service.js';
-import { AuthGuard } from './auth.guard.js';
+import { AuthController } from '../../src/auth/auth.controller.js';
+import { AuthService } from '../../src/auth/auth.service.js';
+import { AuthGuard } from '../../src/auth/auth.guard.js';
 
 vi.mock('../generated/prisma/client', () => ({
   Role: { ADMIN: 'ADMIN', MEMBER: 'MEMBER' },
