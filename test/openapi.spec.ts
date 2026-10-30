@@ -3,9 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { AuthController } from '../../src/auth/auth.controller.js';
-import { AuthGuard } from '../../src/auth/auth.guard.js';
-import { AuthService } from '../../src/auth/auth.service.js';
+import { AuthController } from '../src/auth/auth.controller.js';
+import { AuthGuard } from '../src/auth/auth.guard.js';
+import { AuthService } from '../src/auth/auth.service.js';
 
 describe('OpenAPI', () => {
   let app: INestApplication;

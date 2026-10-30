@@ -1,0 +1,8 @@
+{
+  "EMAIL_INVALID": "Enter a valid email address",
+  "PASSWORD_REQUIRED": "The password is required",
+  "PASSWORD_MIN_LENGTH": "The password must be at least {constraints.0} characters long",
+  "TENANT_NAME_REQUIRED": "The organization name is required",
+  "TENANT_NAME_MIN_LENGTH": "The organization name must be at least {constraints.0} characters long",
+  "NAME_INVALID": "The name must be text"
+}

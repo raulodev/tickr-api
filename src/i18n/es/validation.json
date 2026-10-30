@@ -1,0 +1,8 @@
+{
+  "EMAIL_INVALID": "Introduce un correo electrónico válido",
+  "PASSWORD_REQUIRED": "La contraseña es obligatoria",
+  "PASSWORD_MIN_LENGTH": "La contraseña debe tener al menos {constraints.0} caracteres",
+  "TENANT_NAME_REQUIRED": "El nombre de la organización es obligatorio",
+  "TENANT_NAME_MIN_LENGTH": "El nombre de la organización debe tener al menos {constraints.0} caracteres",
+  "NAME_INVALID": "El nombre debe ser texto"
+}

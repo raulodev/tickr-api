@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
-import { ValidationPipe } from '@nestjs/common';
+import { I18nValidationPipe, I18nValidationExceptionFilter } from 'nestjs-i18n';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,7 +14,8 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, documentFactory);
 
   app.enableShutdownHooks();
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  app.useGlobalPipes(new I18nValidationPipe({ whitelist: true }));
+  app.useGlobalFilters(new I18nValidationExceptionFilter());
   await app.listen(process.env.PORT ?? 3000);
 }
 await bootstrap();

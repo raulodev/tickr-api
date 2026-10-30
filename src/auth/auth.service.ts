@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { Role } from '../generated/prisma/client.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { t } from '../i18n/t.js';
 
 @Injectable()
 export class AuthService {
@@ -22,7 +23,7 @@ export class AuthService {
     const exists = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (exists) throw new ConflictException('El correo ya está registrado');
+    if (exists) throw new ConflictException(t('auth.EMAIL_ALREADY_REGISTERED'));
 
     const password = await bcrypt.hash(dto.password, 10);
     const slug =
@@ -58,7 +59,7 @@ export class AuthService {
     });
     const valid = user && (await bcrypt.compare(dto.password, user.password));
     if (!user || !valid) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(t('auth.INVALID_CREDENTIALS'));
     }
     return this.signToken(user);
   }
