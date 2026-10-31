@@ -1,5 +1,4 @@
 import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,14 +10,13 @@ describe('OpenAPI', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    const builder = Test.createTestingModule({
       controllers: [AuthController],
-      providers: [
-        { provide: AuthService, useValue: {} },
-        { provide: AuthGuard, useValue: { canActivate: () => true } },
-        { provide: JwtService, useValue: {} },
-      ],
-    }).compile();
+      providers: [{ provide: AuthService, useValue: {} }],
+    })
+      .overrideGuard(AuthGuard)
+      .useValue({ canActivate: () => true });
+    const moduleRef = await builder.compile();
 
     app = moduleRef.createNestApplication();
     await app.init();

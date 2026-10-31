@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module.js';
 import { TenantModule } from './tenant/tenant.module.js';
 import { UsersModule } from './users/users.module.js';
+import { PrismaModule } from './prisma/prisma.module.js';
 import { AcceptLanguageResolver, I18nModule, QueryResolver } from 'nestjs-i18n';
 
 @Module({
@@ -20,6 +21,7 @@ import { AcceptLanguageResolver, I18nModule, QueryResolver } from 'nestjs-i18n';
         AcceptLanguageResolver, // Accept-Language: es
       ],
     }),
+    PrismaModule,
     AuthModule,
     TenantModule,
     UsersModule,

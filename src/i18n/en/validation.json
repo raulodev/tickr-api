@@ -5,5 +5,6 @@
   "TENANT_NAME_REQUIRED": "The organization name is required",
   "TENANT_NAME_MIN_LENGTH": "The organization name must be at least {constraints.0} characters long",
   "NAME_INVALID": "The name must be text",
-  "TENANT_ID_INVALID": "The organization id is not valid"
+  "TENANT_ID_INVALID": "The organization id is not valid",
+  "ROLE_INVALID": "The role must be ADMIN or MEMBER"
 }

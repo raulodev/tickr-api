@@ -1,34 +1,54 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { AuthGuard } from '../auth/auth.guard.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { type AuthUser, CurrentUser } from '../auth/auth-user.js';
+import { Role } from '../generated/prisma/client.js';
 import { TenantService } from './tenant.service.js';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
-import { UpdateTenantDto } from './dto/update-tenant.dto.js';
+import { AddMemberDto } from './dto/add-member.dto.js';
 
-@Controller('tenant')
+@ApiTags('tenants')
+@ApiBearerAuth()
+@Controller('tenants')
+@UseGuards(AuthGuard, RolesGuard)
 export class TenantController {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(private tenants: TenantService) {}
 
   @Post()
-  create(@Body() createTenantDto: CreateTenantDto) {
-    return this.tenantService.create(createTenantDto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateTenantDto) {
+    return this.tenants.create(user.sub, dto);
   }
 
-  @Get()
-  findAll() {
-    return this.tenantService.findAll();
+  @Get('current/members')
+  listMembers(@CurrentUser() user: AuthUser) {
+    return this.tenants.listMembers(user.tenantId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.tenantService.findOne(+id);
+  @Post('current/members')
+  @Roles(Role.ADMIN)
+  addMember(@CurrentUser() user: AuthUser, @Body() dto: AddMemberDto) {
+    return this.tenants.addMember(user.tenantId, dto);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTenantDto: UpdateTenantDto) {
-    return this.tenantService.update(+id, updateTenantDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.tenantService.remove(+id);
+  @Delete('current/members/:userId')
+  @Roles(Role.ADMIN)
+  @HttpCode(204)
+  removeMember(
+    @CurrentUser() user: AuthUser,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.tenants.removeMember(user.tenantId, userId);
   }
 }

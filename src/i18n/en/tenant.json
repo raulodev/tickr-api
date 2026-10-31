@@ -1,0 +1,6 @@
+{
+  "USER_NOT_FOUND": "No registered user with this email",
+  "ALREADY_MEMBER": "This user is already a member of the organization",
+  "MEMBER_NOT_FOUND": "Member not found",
+  "LAST_ADMIN": "The organization must keep at least one administrator"
+}

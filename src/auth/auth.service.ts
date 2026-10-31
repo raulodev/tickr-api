@@ -6,12 +6,12 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Role } from '../generated/prisma/client.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { t } from '../i18n/t.js';
+import { generateSlug } from '../common/slug.js';
 
 @Injectable()
 export class AuthService {
@@ -28,14 +28,7 @@ export class AuthService {
 
     const password = await bcrypt.hash(dto.password, 10);
 
-    const slug =
-      dto.tenantName
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') +
-      '-' +
-      randomBytes(3).toString('hex');
+    const slug = generateSlug(dto.tenantName);
 
     const user = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -102,5 +95,12 @@ export class AuthService {
       role: membership.role,
     };
     return { access_token: await this.jwt.signAsync(payload) };
+  }
+
+  async issueToken(
+    userId: string,
+    membership: { tenantId: string; role: Role },
+  ) {
+    return this.signToken(userId, membership);
   }
 }

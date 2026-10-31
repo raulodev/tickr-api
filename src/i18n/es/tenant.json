@@ -1,0 +1,6 @@
+{
+  "USER_NOT_FOUND": "No existe un usuario registrado con este correo",
+  "ALREADY_MEMBER": "Este usuario ya es miembro de la organización",
+  "MEMBER_NOT_FOUND": "Miembro no encontrado",
+  "LAST_ADMIN": "La organización debe conservar al menos un administrador"
+}

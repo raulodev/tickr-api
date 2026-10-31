@@ -5,5 +5,6 @@
   "TENANT_NAME_REQUIRED": "El nombre de la organización es obligatorio",
   "TENANT_NAME_MIN_LENGTH": "El nombre de la organización debe tener al menos {constraints.0} caracteres",
   "NAME_INVALID": "El nombre debe ser texto",
-  "TENANT_ID_INVALID": "El identificador de la organización no es válido"
+  "TENANT_ID_INVALID": "El identificador de la organización no es válido",
+  "ROLE_INVALID": "El rol debe ser ADMIN o MEMBER"
 }
