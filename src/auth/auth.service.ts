@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -26,6 +27,7 @@ export class AuthService {
     if (exists) throw new ConflictException(t('auth.EMAIL_ALREADY_REGISTERED'));
 
     const password = await bcrypt.hash(dto.password, 10);
+
     const slug =
       dto.tenantName
         .toLowerCase()
@@ -44,28 +46,61 @@ export class AuthService {
           email: dto.email,
           password,
           name: dto.name,
-          role: Role.ADMIN,
-          tenantId: tenant.id,
+          memberships: { create: { tenantId: tenant.id, role: Role.ADMIN } },
         },
+        include: { memberships: true },
       });
     });
 
-    return this.signToken(user);
+    return this.signToken(user.id, user.memberships[0]);
   }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      include: {
+        memberships: {
+          orderBy: { createdAt: 'asc' },
+          include: { tenant: { select: { id: true, name: true, slug: true } } },
+        },
+      },
     });
     const valid = user && (await bcrypt.compare(dto.password, user.password));
-    if (!user || !valid) {
+    if (!user || !valid)
       throw new UnauthorizedException(t('auth.INVALID_CREDENTIALS'));
-    }
-    return this.signToken(user);
+
+    const [membership] = user.memberships;
+    if (!membership) throw new ForbiddenException(t('auth.NO_ORGANIZATION'));
+
+    return {
+      ...(await this.signToken(user.id, membership)),
+      organizations: user.memberships.map((m) => ({
+        id: m.tenant.id,
+        name: m.tenant.name,
+        slug: m.tenant.slug,
+        role: m.role,
+      })),
+    };
   }
 
-  private async signToken(user: { id: string; tenantId: string; role: Role }) {
-    const payload = { sub: user.id, tenantId: user.tenantId, role: user.role };
+  async switchTenant(userId: string, tenantId: string) {
+    const membership = await this.prisma.membership.findUnique({
+      where: { userId_tenantId: { userId, tenantId } },
+    });
+    if (!membership) throw new ForbiddenException(t('auth.NOT_A_MEMBER'));
+
+    return this.signToken(userId, membership);
+  }
+
+  private async signToken(
+    userId: string,
+    membership: { tenantId: string; role: Role },
+  ) {
+    const payload = {
+      sub: userId,
+      tenantId: membership.tenantId,
+      role: membership.role,
+    };
     return { access_token: await this.jwt.signAsync(payload) };
   }
 }
