@@ -1,23 +1,30 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
-import { I18nValidationPipe, I18nValidationExceptionFilter } from 'nestjs-i18n';
+import { setupApp } from './setup-app.js';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  const config = new DocumentBuilder()
+  const config = app.get(ConfigService);
+
+  const trustProxy = config.get<string>('TRUST_PROXY');
+  if (trustProxy) app.set('trust proxy', Number(trustProxy));
+
+  setupApp(app);
+
+  const swaggerConfig = new DocumentBuilder()
     .setTitle('Tickr')
     .setVersion('1.0')
     .build();
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
+
+  const documentFactory = () =>
+    SwaggerModule.createDocument(app, swaggerConfig);
+
   SwaggerModule.setup('api', app, documentFactory);
 
-  app.enableShutdownHooks();
-  app.useGlobalPipes(
-    new I18nValidationPipe({ whitelist: true, transform: true }),
-  );
-  app.useGlobalFilters(new I18nValidationExceptionFilter());
   await app.listen(process.env.PORT ?? 3000);
 }
 await bootstrap();
