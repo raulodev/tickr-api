@@ -3,17 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '../generated/prisma/client.js';
 import { type AuthUser } from '../auth/auth-user.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { t } from '../i18n/t.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   InjectTenantDb,
   type ScopedPrismaClient,
 } from '../prisma/tenant-db.provider.js';
-import { t } from '../i18n/t.js';
 import { CreateIssueDto } from './dto/create-issue.dto.js';
-import { UpdateIssueDto } from './dto/update-issue.dto.js';
 import { ListIssuesQueryDto } from './dto/list-issues-query.dto.js';
+import { UpdateIssueDto } from './dto/update-issue.dto.js';
+import { buildSearchFilter } from './issue-search.js';
 
 const include = { project: { select: { key: true } } } as const;
 type IssueWithProject = Prisma.IssueGetPayload<{ include: typeof include }>;
@@ -32,8 +33,14 @@ export class IssueService {
   ) {}
 
   async list(query: ListIssuesQueryDto) {
-    const { page, limit, projectId, status, priority, assigneeId } = query;
-    const where = { projectId, status, priority, assigneeId }; // undefined = sin filtro
+    const { page, limit, projectId, status, priority, assigneeId, q } = query;
+    const where: Prisma.IssueWhereInput = {
+      projectId,
+      status,
+      priority,
+      assigneeId,
+      ...(q ? buildSearchFilter(q) : {}),
+    };
 
     const [issues, total] = await Promise.all([
       this.db.issue.findMany({

@@ -1,9 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import {
-  I18nValidationExceptionFilter,
-  I18nValidationPipe,
-} from 'nestjs-i18n';
+import { I18nValidationExceptionFilter, I18nValidationPipe } from 'nestjs-i18n';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
@@ -408,6 +405,163 @@ describe('Issues (e2e)', () => {
           },
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('búsqueda de texto (?q=)', () => {
+    const search = (
+      token: string,
+      q: string,
+      extra: Record<string, string> = {},
+    ) =>
+      api()
+        .get('/issues')
+        .query({ q, ...extra })
+        .set(bearer(token));
+
+    const keysOf = (res: { body: { data: { key: string }[] } }) =>
+      res.body.data.map((issue) => issue.key).sort();
+
+    /** TKR-1 a TKR-4 */
+    const seed = async (token: string, projectId: string) => {
+      await createIssue(token, {
+        projectId,
+        title: 'Error de login en móvil',
+        description: 'Falla al iniciar sesión',
+      }).expect(201);
+      await createIssue(token, {
+        projectId,
+        title: 'Subida al 100% completada',
+      }).expect(201);
+      await createIssue(token, {
+        projectId,
+        title: 'Revisar snake_case en la API',
+        description: 'Nombres de campos',
+      }).expect(201);
+      await createIssue(token, {
+        projectId,
+        title: 'Diseñar pantalla de inicio',
+        description: 'Incluye el LOGIN social',
+      }).expect(201);
+    };
+
+    it('busca en título y descripción sin distinguir mayúsculas', async () => {
+      const { adminA, projectA } = await setup();
+      await seed(adminA, projectA);
+
+      const res = await search(adminA, 'login').expect(200);
+
+      expect(keysOf(res)).toEqual(['TKR-1', 'TKR-4']);
+      expect(res.body.meta.total).toBe(2);
+    });
+
+    it('exige todas las palabras, cada una en el título o en la descripción', async () => {
+      const { adminA, projectA } = await setup();
+      await seed(adminA, projectA);
+
+      expect(keysOf(await search(adminA, 'login móvil').expect(200))).toEqual([
+        'TKR-1',
+      ]);
+      expect(keysOf(await search(adminA, 'login sesión').expect(200))).toEqual([
+        'TKR-1',
+      ]);
+      expect(
+        (await search(adminA, 'login inexistente').expect(200)).body.meta.total,
+      ).toBe(0);
+    });
+
+    it('encuentra por la clave visible, en cualquier capitalización', async () => {
+      const { adminA, projectA } = await setup();
+      await seed(adminA, projectA);
+
+      expect(keysOf(await search(adminA, 'tkr-2').expect(200))).toEqual([
+        'TKR-2',
+      ]);
+      expect(keysOf(await search(adminA, 'TKR-3').expect(200))).toEqual([
+        'TKR-3',
+      ]);
+      expect((await search(adminA, 'TKR-99').expect(200)).body.meta.total).toBe(
+        0,
+      );
+    });
+
+    it('trata % y _ como texto literal, no como comodines', async () => {
+      const { adminA, projectA } = await setup();
+      await seed(adminA, projectA);
+
+      expect(keysOf(await search(adminA, '%').expect(200))).toEqual(['TKR-2']);
+      expect(keysOf(await search(adminA, '_').expect(200))).toEqual(['TKR-3']);
+      expect(keysOf(await search(adminA, 'snake_').expect(200))).toEqual([
+        'TKR-3',
+      ]);
+      expect((await search(adminA, 'snake%').expect(200)).body.meta.total).toBe(
+        0,
+      );
+    });
+
+    it('se combina con otros filtros y con la paginación', async () => {
+      const { adminA, projectA } = await setup();
+      await seed(adminA, projectA);
+      const first = (await search(adminA, 'tkr-1').expect(200)).body.data[0];
+      await api()
+        .patch(`/issues/${first.id}`)
+        .set(bearer(adminA))
+        .send({ status: 'CLOSED' })
+        .expect(200);
+
+      const closed = await search(adminA, 'login', { status: 'CLOSED' }).expect(
+        200,
+      );
+      expect(keysOf(closed)).toEqual(['TKR-1']);
+
+      const page = await search(adminA, 'login', {
+        limit: '1',
+        page: '2',
+      }).expect(200);
+      expect(page.body.data).toHaveLength(1);
+      expect(page.body.meta).toEqual({ total: 2, page: 2, limit: 1 });
+    });
+
+    it('un q vacío o con solo espacios no filtra', async () => {
+      const { adminA, projectA } = await setup();
+      await seed(adminA, projectA);
+
+      expect((await search(adminA, '').expect(200)).body.meta.total).toBe(4);
+      expect((await search(adminA, '   ').expect(200)).body.meta.total).toBe(4);
+    });
+
+    it('valida el texto de búsqueda y traduce el error', async () => {
+      const { adminA } = await setup();
+
+      await search(adminA, 'x'.repeat(101)).expect(400);
+      await api().get('/issues?q=a&q=b').set(bearer(adminA)).expect(400);
+
+      const res = await search(adminA, 'x'.repeat(101))
+        .set('Accept-Language', 'es')
+        .expect(400);
+      expect(JSON.stringify(res.body)).toContain(
+        'no puede superar los 100 caracteres',
+      );
+    });
+
+    it('nunca devuelve resultados de otra organización', async () => {
+      const { adminA, adminB, projectA, projectB } = await setup();
+      await seed(adminA, projectA);
+      await createIssue(adminB, {
+        projectId: projectB,
+        title: 'Error de login en OTR',
+      }).expect(201);
+
+      expect(keysOf(await search(adminA, 'login').expect(200))).toEqual([
+        'TKR-1',
+        'TKR-4',
+      ]);
+      expect(keysOf(await search(adminB, 'login').expect(200))).toEqual([
+        'OTR-1',
+      ]);
+      expect((await search(adminA, 'OTR-1').expect(200)).body.meta.total).toBe(
+        0,
+      );
     });
   });
 });

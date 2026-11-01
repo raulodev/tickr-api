@@ -142,6 +142,34 @@ describe('IssueService', () => {
         expect.objectContaining({ skip: 0, take: 20 }),
       );
     });
+
+    it('con q combina la búsqueda de texto con el resto de filtros', async () => {
+      db.issue.findMany.mockResolvedValue([]);
+      db.issue.count.mockResolvedValue(0);
+
+      await service.list({
+        page: 1,
+        limit: 20,
+        projectId: 'project-1',
+        q: 'login',
+      } as never);
+
+      const where = {
+        projectId: 'project-1',
+        AND: [
+          {
+            OR: [
+              { title: { contains: 'login', mode: 'insensitive' } },
+              { description: { contains: 'login', mode: 'insensitive' } },
+            ],
+          },
+        ],
+      };
+      expect(db.issue.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where }),
+      );
+      expect(db.issue.count).toHaveBeenCalledWith({ where });
+    });
   });
 
   describe('findOne', () => {

@@ -22,5 +22,7 @@
   "ISSUE_STATUS_INVALID": "El estado debe ser OPEN, IN_PROGRESS o CLOSED",
   "ISSUE_PRIORITY_INVALID": "La prioridad debe ser LOW, MEDIUM, HIGH o URGENT",
   "COMMENT_BODY_REQUIRED": "El comentario no puede estar vacío",
-  "COMMENT_BODY_MAX_LENGTH": "El comentario no puede superar los {constraints.0} caracteres"
+  "COMMENT_BODY_MAX_LENGTH": "El comentario no puede superar los {constraints.0} caracteres",
+  "SEARCH_INVALID": "El texto de búsqueda debe ser texto",
+  "SEARCH_MAX_LENGTH": "El texto de búsqueda no puede superar los {constraints.0} caracteres"
 }
