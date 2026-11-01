@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service.js';
@@ -15,6 +12,7 @@ describe('TenantService', () => {
   let service: TenantService;
 
   const prisma = {
+    $transaction: vi.fn(),
     membership: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -22,12 +20,15 @@ describe('TenantService', () => {
       count: vi.fn(),
       delete: vi.fn(),
     },
+    issue: { updateMany: vi.fn() },
     user: { findUnique: vi.fn() },
   };
   const auth = { issueToken: vi.fn() };
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    const tx = { ...prisma, $queryRaw: vi.fn() };
+    prisma.$transaction.mockImplementation((callback) => callback(tx));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -217,14 +218,18 @@ describe('TenantService', () => {
       expect(prisma.membership.delete).toHaveBeenCalledWith({
         where: { id: 'membership-1' },
       });
+      expect(prisma.issue.updateMany).toHaveBeenCalledWith({
+        where: { tenantId: 'tenant-1', assigneeId: 'user-2' },
+        data: { assigneeId: null },
+      });
     });
 
     it('throws NotFoundException when the user is not a member', async () => {
       prisma.membership.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.removeMember('tenant-1', 'user-2'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.removeMember('tenant-1', 'user-2')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.membership.delete).not.toHaveBeenCalled();
     });
 
@@ -254,7 +259,7 @@ describe('TenantService', () => {
 
       await expect(
         service.removeMember('tenant-1', 'user-2'),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toHaveProperty('status', 409);
       expect(prisma.membership.delete).not.toHaveBeenCalled();
     });
   });
