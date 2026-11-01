@@ -12,5 +12,13 @@
   "PROJECT_NAME_MAX_LENGTH": "The project name must be at most {constraints.0} characters long",
   "PROJECT_KEY_INVALID": "The key must have 2 to 10 characters: uppercase letters and digits, starting with a letter",
   "PAGE_INVALID": "The page must be an integer greater than 0",
-  "LIMIT_INVALID": "The limit must be an integer between 1 and 100"
+  "LIMIT_INVALID": "The limit must be an integer between 1 and 100",
+  "ID_INVALID": "The identifier is not valid",
+  "ISSUE_TITLE_REQUIRED": "The title is required",
+  "ISSUE_TITLE_MIN_LENGTH": "The title must be at least {constraints.0} characters long",
+  "ISSUE_TITLE_MAX_LENGTH": "The title must be at most {constraints.0} characters long",
+  "ISSUE_DESCRIPTION_INVALID": "The description must be text",
+  "ISSUE_DESCRIPTION_MAX_LENGTH": "The description must be at most {constraints.0} characters long",
+  "ISSUE_STATUS_INVALID": "The status must be OPEN, IN_PROGRESS or CLOSED",
+  "ISSUE_PRIORITY_INVALID": "The priority must be LOW, MEDIUM, HIGH or URGENT"
 }

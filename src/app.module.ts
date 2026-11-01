@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { AcceptLanguageResolver, I18nModule, QueryResolver } from 'nestjs-i18n';
 import { ClsModule } from 'nestjs-cls';
 import { ProjectModule } from './project/project.module.js';
+import { IssueModule } from './issue/issue.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ProjectModule } from './project/project.module.js';
     TenantModule,
     UsersModule,
     ProjectModule,
+    IssueModule,
   ],
 })
 export class AppModule {}

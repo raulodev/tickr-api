@@ -83,6 +83,12 @@ export class TenantService {
       if (admins <= 1) throw new ConflictException(t('tenant.LAST_ADMIN'));
     }
 
-    await this.prisma.membership.delete({ where: { id: target.id } });
+    await this.prisma.$transaction([
+      this.prisma.issue.updateMany({
+        where: { tenantId, assigneeId: userId },
+        data: { assigneeId: null },
+      }),
+      this.prisma.membership.delete({ where: { id: target.id } }),
+    ]);
   }
 }

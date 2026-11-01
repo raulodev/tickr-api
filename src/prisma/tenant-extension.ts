@@ -3,6 +3,7 @@ import { Prisma } from '../generated/prisma/client.js';
 /** Modelos con columna tenantId. Al crear un modelo nuevo con tenant, agrégalo aquí. */
 const TENANT_MODELS: ReadonlySet<string> = new Set<Prisma.ModelName>([
   'Project',
+  'Issue',
 ]);
 
 const FILTERED = new Set([
