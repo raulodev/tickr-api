@@ -4,6 +4,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { t } from '../i18n/t.js';
@@ -14,6 +15,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     private jwt: JwtService,
     private prisma: PrismaService,
+    private cls: ClsService,
   ) {}
 
   async canActivate(ctx: ExecutionContext) {
@@ -37,6 +39,8 @@ export class AuthGuard implements CanActivate {
       select: { role: true },
     });
     if (!membership) throw new UnauthorizedException(t('auth.UNAUTHORIZED'));
+
+    this.cls.set('tenantId', payload.tenantId);
 
     req.user = {
       sub: payload.sub,

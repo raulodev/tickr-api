@@ -49,11 +49,11 @@ describe('Auth (e2e)', () => {
 
       const user = await prisma.user.findUnique({
         where: { email: validUser.email },
-        include: { tenant: true },
+        include: { memberships: { include: { tenant: true } } },
       });
       expect(user).not.toBeNull();
-      expect(user!.role).toBe('ADMIN');
-      expect(user!.tenant.name).toBe('Mi Empresa');
+      expect(user!.memberships[0].role).toBe('ADMIN');
+      expect(user!.memberships[0].tenant.name).toBe('Mi Empresa');
       expect(user!.password).not.toBe(validUser.password); // guardada con hash
     });
 
@@ -65,9 +65,13 @@ describe('Auth (e2e)', () => {
         email: 'otro@test.com',
       }).expect(201);
 
-      const users = await prisma.user.findMany();
+      const users = await prisma.user.findMany({
+        include: { memberships: true },
+      });
       expect(users).toHaveLength(2);
-      expect(users[0].tenantId).not.toBe(users[1].tenantId);
+      expect(users[0].memberships[0].tenantId).not.toBe(
+        users[1].memberships[0].tenantId,
+      );
     });
 
     it('responde 409 si el correo ya está registrado', async () => {
@@ -139,6 +143,7 @@ describe('Auth (e2e)', () => {
       const { body } = await register().expect(201);
       const user = await prisma.user.findUniqueOrThrow({
         where: { email: validUser.email },
+        include: { memberships: true },
       });
 
       const res = await request(app.getHttpServer())
@@ -148,7 +153,7 @@ describe('Auth (e2e)', () => {
 
       expect(res.body).toMatchObject({
         sub: user.id,
-        tenantId: user.tenantId,
+        tenantId: user.memberships[0].tenantId,
         role: 'ADMIN',
       });
     });

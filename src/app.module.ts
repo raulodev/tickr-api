@@ -6,10 +6,12 @@ import { TenantModule } from './tenant/tenant.module.js';
 import { UsersModule } from './users/users.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { AcceptLanguageResolver, I18nModule, QueryResolver } from 'nestjs-i18n';
+import { ClsModule } from 'nestjs-cls';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     I18nModule.forRoot({
       fallbackLanguage: 'en',
       loaderOptions: {
