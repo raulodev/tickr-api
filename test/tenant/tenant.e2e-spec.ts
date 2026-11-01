@@ -4,6 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
+import { setupApp } from '../../src/setup-app.js';
 
 describe('Tenants y membresías (e2e)', () => {
   let app: INestApplication;
@@ -26,6 +27,7 @@ describe('Tenants y membresías (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleRef.createNestApplication();
+    setupApp(app);
     await app.init();
     prisma = app.get(PrismaService);
   });
@@ -145,5 +147,146 @@ describe('Tenants y membresías (e2e)', () => {
     const second = await me(res.body.access_token).expect(200);
     expect(second.body.tenantId).not.toBe(firstTenant);
     expect(second.body.role).toBe('ADMIN');
+  });
+
+  describe('PATCH /tenants/current/members/:userId (cambio de rol)', () => {
+    const changeRole = (token: string, userId: string, role?: unknown) =>
+      api()
+        .patch(`/tenants/current/members/${userId}`)
+        .set(bearer(token))
+        .send(role === undefined ? {} : { role });
+
+    const addMember = (token: string) =>
+      api()
+        .post('/tenants/current/members')
+        .set(bearer(token))
+        .send({ email: 'nadie@test.com' });
+
+    const adminIdOf = async (token: string) =>
+      (await me(token).expect(200)).body.sub as string;
+
+    it('un admin promueve a un miembro y este obtiene permisos de inmediato', async () => {
+      const { adminToken, anaToken, anaId } = await setup();
+      await addMember(anaToken).expect(403); // como MEMBER no puede añadir miembros
+
+      const res = await changeRole(adminToken, anaId, 'ADMIN').expect(200);
+      expect(res.body).toMatchObject({
+        userId: anaId,
+        email: 'ana@test.com',
+        role: 'ADMIN',
+      });
+
+      // El mismo token ahora pasa el control de rol: llega al servicio, que no encuentra el correo (404)
+      await addMember(anaToken).expect(404);
+    });
+
+    it('degradar a un admin le quita los permisos de inmediato', async () => {
+      const { adminToken, anaToken, anaId } = await setup();
+      await changeRole(adminToken, anaId, 'ADMIN').expect(200);
+      await addMember(anaToken).expect(404);
+
+      const res = await changeRole(adminToken, anaId, 'MEMBER').expect(200);
+      expect(res.body.role).toBe('MEMBER');
+
+      await addMember(anaToken).expect(403);
+    });
+
+    it('no permite degradar al último administrador', async () => {
+      const { adminToken, tenantId } = await setup();
+      const adminId = await adminIdOf(adminToken);
+
+      await changeRole(adminToken, adminId, 'MEMBER').expect(409);
+
+      const membership = await prisma.membership.findFirstOrThrow({
+        where: { userId: adminId, tenantId },
+      });
+      expect(membership.role).toBe('ADMIN');
+    });
+
+    it('es idempotente: pedir el rol actual responde 200 sin cambios', async () => {
+      const { adminToken, anaId } = await setup();
+
+      const res = await changeRole(adminToken, anaId, 'MEMBER').expect(200);
+      expect(res.body.role).toBe('MEMBER');
+    });
+
+    it('un miembro sin rol admin no puede cambiar roles, ni siquiera el suyo', async () => {
+      const { anaToken, anaId, tenantId } = await setup();
+
+      await changeRole(anaToken, anaId, 'ADMIN').expect(403);
+
+      const membership = await prisma.membership.findFirstOrThrow({
+        where: { userId: anaId, tenantId },
+      });
+      expect(membership.role).toBe('MEMBER');
+    });
+
+    it('responde 404 si el usuario no es miembro de la organización', async () => {
+      const { adminToken } = await setup();
+      const stranger = await registerUser('otro@test.com'); // existe, pero en otra organización
+      const { sub: strangerId } = (await me(stranger).expect(200)).body;
+
+      await changeRole(adminToken, strangerId, 'ADMIN').expect(404);
+      await changeRole(
+        adminToken,
+        '00000000-0000-4000-8000-000000000000',
+        'ADMIN',
+      ).expect(404);
+    });
+
+    it('valida el rol y el identificador', async () => {
+      const { adminToken, anaId } = await setup();
+
+      await changeRole(adminToken, anaId, 'SUPERADMIN').expect(400);
+      await changeRole(adminToken, anaId).expect(400);
+      await changeRole(adminToken, 'no-es-uuid', 'ADMIN').expect(400);
+    });
+
+    it('otra organización no puede cambiar los roles de esta', async () => {
+      const { anaId } = await setup();
+      const adminB = await registerUser('admin-b@test.com');
+
+      await changeRole(adminB, anaId, 'ADMIN').expect(404);
+    });
+
+    it('dos admins que se degradan a la vez nunca dejan la organización sin administrador', async () => {
+      const { adminToken, anaToken, anaId, tenantId } = await setup();
+      const adminId = await adminIdOf(adminToken);
+      await changeRole(adminToken, anaId, 'ADMIN').expect(200);
+
+      const results = await Promise.all([
+        changeRole(adminToken, anaId, 'MEMBER'),
+        changeRole(anaToken, adminId, 'MEMBER'),
+      ]);
+
+      // Una prospera; la otra recibe 409 (último admin) o 403 (ya la habían degradado)
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      results
+        .filter((r) => r.status !== 200)
+        .forEach((r) => expect([403, 409]).toContain(r.status));
+      expect(
+        await prisma.membership.count({ where: { tenantId, role: 'ADMIN' } }),
+      ).toBe(1);
+    });
+
+    it('dos admins que se expulsan a la vez nunca dejan la organización sin administrador', async () => {
+      const { adminToken, anaToken, anaId, tenantId } = await setup();
+      const adminId = await adminIdOf(adminToken);
+      await changeRole(adminToken, anaId, 'ADMIN').expect(200);
+
+      const results = await Promise.all([
+        api()
+          .delete(`/tenants/current/members/${anaId}`)
+          .set(bearer(adminToken)),
+        api()
+          .delete(`/tenants/current/members/${adminId}`)
+          .set(bearer(anaToken)),
+      ]);
+
+      expect(results.filter((r) => r.status === 204)).toHaveLength(1);
+      expect(
+        await prisma.membership.count({ where: { tenantId, role: 'ADMIN' } }),
+      ).toBe(1);
+    });
   });
 });

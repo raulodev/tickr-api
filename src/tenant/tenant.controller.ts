@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { Role } from '../generated/prisma/client.js';
 import { TenantService } from './tenant.service.js';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
 import { AddMemberDto } from './dto/add-member.dto.js';
+import { ChangeRoleDto } from './dto/change-role.dto.js';
 
 @ApiTags('tenants')
 @ApiBearerAuth()
@@ -50,5 +52,15 @@ export class TenantController {
     @Param('userId', ParseUUIDPipe) userId: string,
   ) {
     return this.tenants.removeMember(user.tenantId, userId);
+  }
+
+  @Patch('current/members/:userId')
+  @Roles(Role.ADMIN)
+  changeRole(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ChangeRoleDto,
+  ) {
+    return this.tenants.changeRole(user.tenantId, userId, dto);
   }
 }
