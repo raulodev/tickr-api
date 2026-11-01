@@ -14,7 +14,9 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, documentFactory);
 
   app.enableShutdownHooks();
-  app.useGlobalPipes(new I18nValidationPipe({ whitelist: true }));
+  app.useGlobalPipes(
+    new I18nValidationPipe({ whitelist: true, transform: true }),
+  );
   app.useGlobalFilters(new I18nValidationExceptionFilter());
   await app.listen(process.env.PORT ?? 3000);
 }

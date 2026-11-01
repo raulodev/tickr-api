@@ -1,0 +1,4 @@
+{
+  "NOT_FOUND": "Proyecto no encontrado",
+  "KEY_ALREADY_EXISTS": "Ya existe un proyecto con esta clave en la organización"
+}
