@@ -1,9 +1,9 @@
 # Tickr
 
-REST API built with NestJS for managing user accounts and multi-user
-organizations. It includes JWT-based registration and sign-in, organization
-selection, member management, and `ADMIN` and `MEMBER` roles. Data is stored in
-PostgreSQL using Prisma.
+Tickr is a NestJS REST API for managing users, multi-tenant organizations, and
+project issues. It provides JWT authentication, organization membership and
+role-based access, projects, sequentially numbered issues, and issue comments.
+PostgreSQL is accessed through Prisma.
 
 ## Requirements
 
@@ -53,8 +53,32 @@ variable to use a different port. Interactive API documentation is available at
   its creator the administrator role.
 - JWT authentication and switching between organizations the user belongs to.
 - Organization creation and member management with role-based permissions.
+- Project management with tenant-scoped project keys.
+- Issue tracking with per-project sequential numbers, status, priority, and
+  optional assignees.
+- Comments on issues, with editing restricted to their authors and deletion
+  available to authors or organization administrators.
+- Tenant isolation across projects, issues, and comments.
 - Validation messages in English or Spanish, selected using the `?lang=`
   parameter or the `Accept-Language` header.
+
+## API overview
+
+Interactive API documentation is available at [`/api`](http://localhost:3000/api)
+when the server is running.
+
+| Route | Description |
+| --- | --- |
+| `/auth` | Register, sign in, get the current user, and switch organizations. |
+| `/tenants` | Create organizations and manage current-organization members. |
+| `/projects` | Create, list, update, and delete projects. |
+| `/issues` | Create, list, update, and delete issues. |
+| `/issues/:issueId/comments` | List and create comments on an issue. |
+| `/comments/:id` | Update or delete a comment. |
+
+Protected routes require a bearer access token. Project creation, updates, and
+deletion are restricted to organization administrators. Organization members
+can create and update issues; issue deletion is restricted to administrators.
 
 ## Commands
 
@@ -65,8 +89,10 @@ variable to use a different port. Interactive API documentation is available at
 | `pnpm start:debug` | Start in watch mode with the debugger. |
 | `pnpm build` | Compile the application into `dist/`. |
 | `pnpm start:prod` | Run the compiled application. |
+| `pnpm format` | Format TypeScript files in `src/` and `test/`. |
 | `pnpm lint` | Lint the code in `src/` and `test/`. |
 | `pnpm test` | Run unit tests. |
+| `pnpm test:watch` | Run tests in watch mode. |
 | `pnpm test:e2e` | Run end-to-end tests. |
 | `pnpm test:cov` | Run tests with coverage. |
 
@@ -74,11 +100,26 @@ End-to-end tests require a separate, disposable PostgreSQL database. Set
 `DATABASE_URL_TEST` to point to that database before running them; the test
 environment applies migrations to it.
 
+## Docker
+
+Build the production image from the repository root:
+
+```bash
+docker build -t tickr .
+```
+
+Run the container with `DATABASE_URL` and `JWT_SECRET` configured in its
+environment. The database host in `DATABASE_URL` must be reachable from inside
+the container. The API listens on port `3000`; publish that port when starting
+the container.
+
 ## Project structure
 
 - `src/auth/`: registration, sign-in, JWT, and role-based authorization.
 - `src/tenant/`: organizations and member management.
-- `src/users/`: user operations.
+- `src/project/`: project endpoints and services.
+- `src/issue/`: issue endpoints, validation, and issue numbering.
+- `src/comment/`: issue comment endpoints and services.
 - `src/prisma/`: Prisma and PostgreSQL integration.
 - `src/i18n/`: English and Spanish translations.
 - `prisma/`: database schema and migrations.
