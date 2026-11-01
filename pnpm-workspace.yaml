@@ -1,5 +1,5 @@
-onlyBuiltDependencies:
-  - '@prisma/engines'
-  - '@scarf/scarf'
-  - bcrypt
-  - prisma
+allowBuilds:
+  '@prisma/engines': true
+  '@scarf/scarf': true
+  bcrypt: true
+  prisma: true
