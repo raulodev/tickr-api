@@ -9,6 +9,7 @@ import { AcceptLanguageResolver, I18nModule, QueryResolver } from 'nestjs-i18n';
 import { ClsModule } from 'nestjs-cls';
 import { ProjectModule } from './project/project.module.js';
 import { IssueModule } from './issue/issue.module.js';
+import { CommentModule } from './comment/comment.module.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { IssueModule } from './issue/issue.module.js';
     UsersModule,
     ProjectModule,
     IssueModule,
+    CommentModule,
   ],
 })
 export class AppModule {}

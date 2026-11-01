@@ -20,5 +20,7 @@
   "ISSUE_DESCRIPTION_INVALID": "The description must be text",
   "ISSUE_DESCRIPTION_MAX_LENGTH": "The description must be at most {constraints.0} characters long",
   "ISSUE_STATUS_INVALID": "The status must be OPEN, IN_PROGRESS or CLOSED",
-  "ISSUE_PRIORITY_INVALID": "The priority must be LOW, MEDIUM, HIGH or URGENT"
+  "ISSUE_PRIORITY_INVALID": "The priority must be LOW, MEDIUM, HIGH or URGENT",
+  "COMMENT_BODY_REQUIRED": "The comment cannot be empty",
+  "COMMENT_BODY_MAX_LENGTH": "The comment must be at most {constraints.0} characters long"
 }

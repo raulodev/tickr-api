@@ -1,0 +1,5 @@
+{
+  "NOT_FOUND": "Comentario no encontrado",
+  "EDIT_NOT_ALLOWED": "Solo el autor puede editar un comentario",
+  "DELETE_NOT_ALLOWED": "Solo el autor o un administrador puede eliminar un comentario"
+}
