@@ -80,7 +80,7 @@ export class TenantService {
     };
   }
 
-  async removeMember(tenantId: string, userId: string) {
+  async removeMember(tenantId: string, userId: string, actorId: string) {
     await this.prisma.$transaction(async (tx) => {
       await this.lockTenant(tx, tenantId);
 
@@ -96,11 +96,26 @@ export class TenantService {
         if (admins <= 1) throw new ConflictException(t('tenant.LAST_ADMIN'));
       }
 
-      // Se le desasignan sus incidencias; las que reportó se conservan
-      await tx.issue.updateMany({
+      const assigned = await tx.issue.findMany({
         where: { tenantId, assigneeId: userId },
-        data: { assigneeId: null },
+        select: { id: true },
       });
+      if (assigned.length > 0) {
+        await tx.issueEvent.createMany({
+          data: assigned.map(({ id }) => ({
+            tenantId,
+            issueId: id,
+            actorId,
+            type: 'ASSIGNEE_CHANGED' as const,
+            oldValue: userId,
+            newValue: null,
+          })),
+        });
+        await tx.issue.updateMany({
+          where: { tenantId, assigneeId: userId },
+          data: { assigneeId: null },
+        });
+      }
       await tx.membership.delete({ where: { id: target.id } });
     });
   }

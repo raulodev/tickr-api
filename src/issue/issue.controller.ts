@@ -21,6 +21,7 @@ import { IssueService } from './issue.service.js';
 import { CreateIssueDto } from './dto/create-issue.dto.js';
 import { UpdateIssueDto } from './dto/update-issue.dto.js';
 import { ListIssuesQueryDto } from './dto/list-issues-query.dto.js';
+import { PaginationQueryDto } from '../common/pagination-query.dto.js';
 
 @ApiTags('issues')
 @ApiBearerAuth()
@@ -58,5 +59,13 @@ export class IssueController {
   @HttpCode(204)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.issues.remove(id);
+  }
+
+  @Get(':id/history')
+  history(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.issues.history(id, query);
   }
 }

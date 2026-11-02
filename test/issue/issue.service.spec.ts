@@ -38,8 +38,10 @@ describe('IssueService', () => {
 
   const tx = {
     project: { update: vi.fn() },
-    issue: { create: vi.fn() },
+    issue: { create: vi.fn(), update: vi.fn(), findUniqueOrThrow: vi.fn() },
+    issueEvent: { create: vi.fn(), createMany: vi.fn() },
   };
+
   const db = {
     issue: {
       findMany: vi.fn(),
@@ -48,6 +50,7 @@ describe('IssueService', () => {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    issueEvent: { findMany: vi.fn(), count: vi.fn() },
     $transaction: vi.fn(),
   };
   const prisma = { membership: { findUnique: vi.fn() } };
@@ -310,16 +313,33 @@ describe('IssueService', () => {
 
       await expect(service.create(user, dto)).rejects.toBe(error);
     });
+
+    it('registra el evento CREATED en la misma transacción', async () => {
+      tx.project.update.mockResolvedValue({ issueCounter: 12 });
+      tx.issue.create.mockResolvedValue(issueRow);
+
+      await service.create(user, dto);
+
+      expect(tx.issueEvent.create).toHaveBeenCalledWith({
+        data: {
+          tenantId: 'tenant-1',
+          issueId: 'issue-1',
+          actorId: 'user-1',
+          type: 'CREATED',
+        },
+      });
+    });
   });
 
   describe('update', () => {
+    const updatedRow = { ...issueRow, title: 'Nuevo', status: 'CLOSED' };
+    const lastUpdate = () => tx.issue.update.mock.calls.at(-1)![0];
+    const eventsWritten = () => tx.issueEvent.createMany.mock.calls[0][0].data;
+
     beforeEach(() => {
-      db.issue.findUnique.mockResolvedValue(issueRow);
-      db.issue.update.mockResolvedValue({
-        ...issueRow,
-        title: 'Nuevo',
-        status: 'CLOSED',
-      });
+      db.issue.findUnique.mockResolvedValue(issueRow); // existencia (getOrFail)
+      tx.issue.update.mockResolvedValue(updatedRow);
+      tx.issue.findUniqueOrThrow.mockResolvedValue(issueRow); // valores vigentes tras el bloqueo
     });
 
     it('actualiza los campos permitidos y devuelve la incidencia con su clave', async () => {
@@ -328,7 +348,8 @@ describe('IssueService', () => {
         status: 'CLOSED',
       } as never);
 
-      expect(db.issue.update).toHaveBeenCalledWith({
+      expect(tx.issue.update).toHaveBeenCalledTimes(2); // bloqueo + actualización real
+      expect(lastUpdate()).toEqual({
         where: { id: 'issue-1' },
         data: expect.objectContaining({ title: 'Nuevo', status: 'CLOSED' }),
         include,
@@ -341,6 +362,66 @@ describe('IssueService', () => {
       expect(result).not.toHaveProperty('project');
     });
 
+    it('bloquea la fila antes de leer los valores vigentes y de escribir', async () => {
+      await service.update(user, 'issue-1', { title: 'Nuevo' } as never);
+
+      const [lock, write] = tx.issue.update.mock.invocationCallOrder;
+      const read = tx.issue.findUniqueOrThrow.mock.invocationCallOrder[0];
+      expect(lock).toBeLessThan(read);
+      expect(read).toBeLessThan(write);
+    });
+
+    it('registra un evento por cada campo seguido que cambia, con autor y valores', async () => {
+      await service.update(user, 'issue-1', {
+        title: 'Nuevo',
+        status: 'CLOSED',
+        priority: 'HIGH',
+      } as never);
+
+      expect(eventsWritten()).toEqual([
+        {
+          tenantId: 'tenant-1',
+          issueId: 'issue-1',
+          actorId: 'user-1',
+          type: 'STATUS_CHANGED',
+          oldValue: 'OPEN',
+          newValue: 'CLOSED',
+        },
+        {
+          tenantId: 'tenant-1',
+          issueId: 'issue-1',
+          actorId: 'user-1',
+          type: 'PRIORITY_CHANGED',
+          oldValue: 'MEDIUM',
+          newValue: 'HIGH',
+        },
+      ]);
+    });
+
+    it('no escribe eventos si solo cambian título o descripción, o el valor es el mismo', async () => {
+      await service.update(user, 'issue-1', {
+        title: 'Nuevo',
+        description: 'Texto',
+        status: 'OPEN',
+      } as never);
+
+      expect(tx.issueEvent.createMany).not.toHaveBeenCalled();
+    });
+
+    it('compara con el valor vigente tras el bloqueo, no con el leído antes', async () => {
+      tx.issue.findUniqueOrThrow.mockResolvedValue({
+        ...issueRow,
+        status: 'IN_PROGRESS',
+      });
+
+      await service.update(user, 'issue-1', { status: 'CLOSED' } as never);
+
+      expect(eventsWritten()[0]).toMatchObject({
+        oldValue: 'IN_PROGRESS',
+        newValue: 'CLOSED',
+      });
+    });
+
     it('ignora number, projectId, reporterId y tenantId aunque lleguen en los datos', async () => {
       await service.update(user, 'issue-1', {
         title: 'Nuevo',
@@ -350,58 +431,74 @@ describe('IssueService', () => {
         tenantId: 'otro-tenant',
       } as never);
 
-      const { data } = db.issue.update.mock.calls[0][0];
       for (const field of ['number', 'projectId', 'reporterId', 'tenantId']) {
-        expect(data).not.toHaveProperty(field);
+        expect(lastUpdate().data).not.toHaveProperty(field);
       }
     });
 
-    it('lanza NotFoundException y no actualiza si la incidencia no existe', async () => {
+    it('lanza NotFoundException y no abre la transacción si la incidencia no existe', async () => {
       db.issue.findUnique.mockResolvedValue(null);
 
       await expect(
         service.update(user, 'no-existe', { title: 'X' } as never),
       ).rejects.toThrow(NotFoundException);
-      expect(db.issue.update).not.toHaveBeenCalled();
+      expect(db.$transaction).not.toHaveBeenCalled();
       expect(prisma.membership.findUnique).not.toHaveBeenCalled();
     });
 
-    it('valida que el nuevo responsable sea miembro', async () => {
+    it('convierte P2025 en 404 si la incidencia desaparece durante la transacción', async () => {
+      db.$transaction.mockRejectedValue(prismaError('P2025'));
+
+      await expect(
+        service.update(user, 'issue-1', { title: 'X' } as never),
+      ).rejects.toThrow('issue.NOT_FOUND');
+    });
+
+    it('valida que el nuevo responsable sea miembro y no abre la transacción', async () => {
       prisma.membership.findUnique.mockResolvedValue(null);
 
       await expect(
         service.update(user, 'issue-1', { assigneeId: 'user-2' } as never),
       ).rejects.toThrow(BadRequestException);
-      expect(db.issue.update).not.toHaveBeenCalled();
+      expect(db.$transaction).not.toHaveBeenCalled();
     });
 
-    it('asigna a un miembro válido', async () => {
+    it('asigna a un miembro válido y registra el cambio de responsable', async () => {
       prisma.membership.findUnique.mockResolvedValue({ id: 'membership-2' });
+      tx.issue.findUniqueOrThrow.mockResolvedValue({
+        ...issueRow,
+        assigneeId: 'user-3',
+      });
 
       await service.update(user, 'issue-1', { assigneeId: 'user-2' } as never);
 
       expect(prisma.membership.findUnique).toHaveBeenCalledWith({
         where: { userId_tenantId: { userId: 'user-2', tenantId: 'tenant-1' } },
       });
-      expect(db.issue.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ assigneeId: 'user-2' }),
-        }),
-      );
+      expect(lastUpdate().data).toMatchObject({ assigneeId: 'user-2' });
+      expect(eventsWritten()[0]).toMatchObject({
+        type: 'ASSIGNEE_CHANGED',
+        oldValue: 'user-3',
+        newValue: 'user-2',
+      });
     });
 
-    it('assigneeId null quita al responsable sin consultar membresías', async () => {
+    it('assigneeId null quita al responsable sin consultar membresías y lo registra', async () => {
+      tx.issue.findUniqueOrThrow.mockResolvedValue({
+        ...issueRow,
+        assigneeId: 'user-3',
+      });
+
       await service.update(user, 'issue-1', { assigneeId: null } as never);
 
       expect(prisma.membership.findUnique).not.toHaveBeenCalled();
-      expect(db.issue.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ assigneeId: null }),
-        }),
-      );
+      expect(lastUpdate().data).toMatchObject({ assigneeId: null });
+      expect(eventsWritten()[0]).toMatchObject({
+        oldValue: 'user-3',
+        newValue: null,
+      });
     });
   });
-
   describe('remove', () => {
     it('elimina la incidencia existente', async () => {
       db.issue.findUnique.mockResolvedValue(issueRow);
@@ -420,6 +517,48 @@ describe('IssueService', () => {
         NotFoundException,
       );
       expect(db.issue.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('history', () => {
+    const event = {
+      id: 'event-1',
+      seq: 3,
+      type: 'STATUS_CHANGED',
+      oldValue: 'OPEN',
+      newValue: 'CLOSED',
+    };
+
+    it('devuelve la página pedida, del más reciente al más antiguo', async () => {
+      db.issue.findUnique.mockResolvedValue(issueRow);
+      db.issueEvent.findMany.mockResolvedValue([event]);
+      db.issueEvent.count.mockResolvedValue(9);
+
+      const result = await service.history('issue-1', { page: 2, limit: 5 });
+
+      expect(db.issueEvent.findMany).toHaveBeenCalledWith({
+        where: { issueId: 'issue-1' },
+        include: { actor: { select: { id: true, name: true, email: true } } },
+        orderBy: { seq: 'desc' },
+        skip: 5,
+        take: 5,
+      });
+      expect(db.issueEvent.count).toHaveBeenCalledWith({
+        where: { issueId: 'issue-1' },
+      });
+      expect(result).toEqual({
+        data: [event],
+        meta: { total: 9, page: 2, limit: 5 },
+      });
+    });
+
+    it('lanza NotFoundException y no consulta eventos si la incidencia no existe', async () => {
+      db.issue.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.history('no-existe', { page: 1, limit: 20 }),
+      ).rejects.toThrow(NotFoundException);
+      expect(db.issueEvent.findMany).not.toHaveBeenCalled();
     });
   });
 });

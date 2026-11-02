@@ -31,6 +31,7 @@ model User {
   reportedIssues Issue[]      @relation("IssueReporter")
   assignedIssues Issue[]      @relation("IssueAssignee")
   comments       Comment[]
+  issueEvents    IssueEvent[]
 }
 
 model Membership {
@@ -93,7 +94,8 @@ model Issue {
   reporter User    @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: Restrict)
   assignee User?   @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
-  comments Comment[]
+  comments    Comment[]
+  issueEvents IssueEvent[]
 
   @@unique([tenantId, id])
   @@unique([projectId, number])
@@ -115,4 +117,29 @@ model Comment {
 
   @@index([tenantId, issueId, createdAt])
   @@index([authorId])
+}
+
+enum IssueEventType {
+  CREATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  ASSIGNEE_CHANGED
+}
+
+model IssueEvent {
+  id        String         @id @default(uuid())
+  seq       Int            @default(autoincrement()) // orden estricto de los eventos
+  tenantId  String
+  issueId   String
+  actorId   String
+  type      IssueEventType
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime       @default(now())
+
+  issue Issue @relation(fields: [tenantId, issueId], references: [tenantId, id], onDelete: Cascade)
+  actor User  @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, issueId, seq])
+  @@index([actorId])
 }

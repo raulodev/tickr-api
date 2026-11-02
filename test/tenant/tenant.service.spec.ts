@@ -20,7 +20,8 @@ describe('TenantService', () => {
       count: vi.fn(),
       delete: vi.fn(),
     },
-    issue: { updateMany: vi.fn() },
+    issue: { updateMany: vi.fn(), findMany: vi.fn() },
+    issueEvent: { createMany: vi.fn() },
     user: { findUnique: vi.fn() },
   };
   const auth = { issueToken: vi.fn() };
@@ -205,9 +206,10 @@ describe('TenantService', () => {
         id: 'membership-1',
         role: Role.MEMBER,
       });
+      prisma.issue.findMany.mockResolvedValue([{ id: 'issue-1' }]);
 
       await expect(
-        service.removeMember('tenant-1', 'user-2'),
+        service.removeMember('tenant-1', 'user-2', 'user-1'),
       ).resolves.toBeUndefined();
       expect(prisma.membership.findUnique).toHaveBeenCalledWith({
         where: {
@@ -215,6 +217,18 @@ describe('TenantService', () => {
         },
       });
       expect(prisma.membership.count).not.toHaveBeenCalled();
+      expect(prisma.issueEvent.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            tenantId: 'tenant-1',
+            issueId: 'issue-1',
+            actorId: 'user-1',
+            type: 'ASSIGNEE_CHANGED',
+            oldValue: 'user-2',
+            newValue: null,
+          },
+        ],
+      });
       expect(prisma.membership.delete).toHaveBeenCalledWith({
         where: { id: 'membership-1' },
       });
@@ -227,9 +241,9 @@ describe('TenantService', () => {
     it('throws NotFoundException when the user is not a member', async () => {
       prisma.membership.findUnique.mockResolvedValue(null);
 
-      await expect(service.removeMember('tenant-1', 'user-2')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.removeMember('tenant-1', 'user-2', 'actor-1'),
+      ).rejects.toThrow(NotFoundException);
       expect(prisma.membership.delete).not.toHaveBeenCalled();
     });
 
@@ -239,8 +253,9 @@ describe('TenantService', () => {
         role: Role.ADMIN,
       });
       prisma.membership.count.mockResolvedValue(2);
+      prisma.issue.findMany.mockResolvedValue([]);
 
-      await service.removeMember('tenant-1', 'user-2');
+      await service.removeMember('tenant-1', 'user-2', 'actor-1');
 
       expect(prisma.membership.count).toHaveBeenCalledWith({
         where: { tenantId: 'tenant-1', role: Role.ADMIN },
@@ -258,7 +273,7 @@ describe('TenantService', () => {
       prisma.membership.count.mockResolvedValue(1);
 
       await expect(
-        service.removeMember('tenant-1', 'user-2'),
+        service.removeMember('tenant-1', 'user-2', 'actor-1'),
       ).rejects.toHaveProperty('status', 409);
       expect(prisma.membership.delete).not.toHaveBeenCalled();
     });

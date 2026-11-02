@@ -30,6 +30,7 @@ describe('IssueController', () => {
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    history: vi.fn(),
   };
 
   const user = { sub: 'user-1', tenantId: 'tenant-1', role: Role.MEMBER };
@@ -123,11 +124,27 @@ describe('IssueController', () => {
       expect(rolesOf('remove')).toEqual([Role.ADMIN]);
     });
 
-    it.each(['list', 'findOne', 'create', 'update'] as const)(
+    it.each(['list', 'findOne', 'create', 'update', 'history'] as const)(
       '%s está abierto a cualquier miembro',
       (handler) => {
         expect(rolesOf(handler)).toBeUndefined();
       },
     );
+
+    it('history pasa el id y la paginación', async () => {
+      const response = { data: [], meta: { total: 0, page: 1, limit: 20 } };
+      issues.history.mockResolvedValue(response);
+
+      const result = await controller.history('issue-1', {
+        page: 1,
+        limit: 20,
+      });
+
+      expect(issues.history).toHaveBeenCalledWith('issue-1', {
+        page: 1,
+        limit: 20,
+      });
+      expect(result).toEqual(response);
+    });
   });
 });

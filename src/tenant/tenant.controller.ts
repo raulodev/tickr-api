@@ -51,7 +51,7 @@ export class TenantController {
     @CurrentUser() user: AuthUser,
     @Param('userId', ParseUUIDPipe) userId: string,
   ) {
-    return this.tenants.removeMember(user.tenantId, userId);
+    return this.tenants.removeMember(user.tenantId, userId, user.sub);
   }
 
   @Patch('current/members/:userId')

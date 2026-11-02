@@ -5,6 +5,7 @@ const TENANT_MODELS: ReadonlySet<string> = new Set<Prisma.ModelName>([
   'Project',
   'Issue',
   'Comment',
+  'IssueEvent',
 ]);
 
 const FILTERED = new Set([

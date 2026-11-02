@@ -73,7 +73,13 @@ describe('TenantController', () => {
   it('removes a member from the authenticated user organization', async () => {
     tenants.removeMember.mockResolvedValue(undefined);
 
-    await expect(controller.removeMember(user, 'user-2')).resolves.toBeUndefined();
-    expect(tenants.removeMember).toHaveBeenCalledWith(user.tenantId, 'user-2');
+    await expect(
+      controller.removeMember(user, 'user-2'),
+    ).resolves.toBeUndefined();
+    expect(tenants.removeMember).toHaveBeenCalledWith(
+      user.tenantId,
+      'user-2',
+      'user-1',
+    );
   });
 });

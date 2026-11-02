@@ -564,4 +564,235 @@ describe('Issues (e2e)', () => {
       );
     });
   });
+
+  describe('historial de cambios (GET /issues/:id/history)', () => {
+    const unknownId = '00000000-0000-4000-8000-000000000000';
+
+    const history = (
+      token: string,
+      id: string,
+      query: Record<string, string> = {},
+    ) => api().get(`/issues/${id}/history`).query(query).set(bearer(token));
+    const patch = (token: string, id: string, body: Record<string, unknown>) =>
+      api().patch(`/issues/${id}`).set(bearer(token)).send(body);
+    const typesOf = (res: { body: { data: { type: string }[] } }) =>
+      res.body.data.map((event) => event.type);
+
+    it('registra la creación con su autor y cualquier miembro puede verla', async () => {
+      const { memberA, projectA, anaId } = await setup();
+      const { id } = (
+        await createIssue(memberA, {
+          projectId: projectA,
+          title: 'Nueva',
+        }).expect(201)
+      ).body;
+
+      const res = await history(memberA, id).expect(200);
+
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0]).toMatchObject({
+        type: 'CREATED',
+        oldValue: null,
+        newValue: null,
+        actor: { id: anaId, email: 'ana@test.com' },
+      });
+    });
+
+    it('registra estado, prioridad y responsable con el valor anterior y el nuevo', async () => {
+      const { adminA, projectA, anaId } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Seguimiento',
+        }).expect(201)
+      ).body;
+
+      await patch(adminA, id, { status: 'IN_PROGRESS' }).expect(200);
+      await patch(adminA, id, { priority: 'URGENT' }).expect(200);
+      await patch(adminA, id, { assigneeId: anaId }).expect(200);
+      await patch(adminA, id, { assigneeId: null }).expect(200);
+
+      const res = await history(adminA, id).expect(200);
+
+      expect(typesOf(res)).toEqual([
+        'ASSIGNEE_CHANGED',
+        'ASSIGNEE_CHANGED',
+        'PRIORITY_CHANGED',
+        'STATUS_CHANGED',
+        'CREATED',
+      ]);
+      const [unassigned, assigned, priority, status] = res.body.data;
+      expect(unassigned).toMatchObject({ oldValue: anaId, newValue: null });
+      expect(assigned).toMatchObject({ oldValue: null, newValue: anaId });
+      expect(priority).toMatchObject({
+        oldValue: 'MEDIUM',
+        newValue: 'URGENT',
+      });
+      expect(status).toMatchObject({
+        oldValue: 'OPEN',
+        newValue: 'IN_PROGRESS',
+      });
+      expect(res.body.meta.total).toBe(5);
+    });
+
+    it('un cambio con varios campos crea un evento por campo y el autor es quien edita', async () => {
+      const { adminA, memberA, projectA, anaId } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Compartida',
+        }).expect(201)
+      ).body;
+
+      await patch(memberA, id, {
+        status: 'CLOSED',
+        priority: 'LOW',
+        title: 'Otro título',
+      }).expect(200);
+
+      const res = await history(adminA, id).expect(200);
+      const edits = res.body.data.filter(
+        (e: { type: string }) => e.type !== 'CREATED',
+      );
+      expect(edits.map((e: { type: string }) => e.type).sort()).toEqual([
+        'PRIORITY_CHANGED',
+        'STATUS_CHANGED',
+      ]);
+      edits.forEach((e: { actor: unknown }) =>
+        expect(e.actor).toMatchObject({ id: anaId, email: 'ana@test.com' }),
+      );
+    });
+
+    it('no registra nada si solo cambian título o descripción, o si el valor no cambia', async () => {
+      const { adminA, projectA } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Estable',
+        }).expect(201)
+      ).body;
+
+      await patch(adminA, id, {
+        title: 'Otro título',
+        description: 'Texto',
+      }).expect(200);
+      await patch(adminA, id, { status: 'OPEN', priority: 'MEDIUM' }).expect(
+        200,
+      );
+
+      expect(typesOf(await history(adminA, id).expect(200))).toEqual([
+        'CREATED',
+      ]);
+    });
+
+    it('pagina el historial del más reciente al más antiguo', async () => {
+      const { adminA, projectA } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Larga',
+        }).expect(201)
+      ).body;
+      await patch(adminA, id, { status: 'IN_PROGRESS' }).expect(200);
+      await patch(adminA, id, { status: 'CLOSED' }).expect(200);
+      await patch(adminA, id, { priority: 'HIGH' }).expect(200);
+
+      const first = await history(adminA, id, { limit: '2' }).expect(200);
+      expect(typesOf(first)).toEqual(['PRIORITY_CHANGED', 'STATUS_CHANGED']);
+
+      const second = await history(adminA, id, {
+        limit: '2',
+        page: '2',
+      }).expect(200);
+      expect(typesOf(second)).toEqual(['STATUS_CHANGED', 'CREATED']);
+      expect(second.body.meta).toEqual({ total: 4, page: 2, limit: 2 });
+    });
+
+    it('al quitar a un miembro se registra la desasignación con el admin como autor', async () => {
+      const { adminA, projectA, anaId } = await setup();
+      const adminId = (await me(adminA).expect(200)).body.sub as string;
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Asignada',
+          assigneeId: anaId,
+        }).expect(201)
+      ).body;
+
+      await api()
+        .delete(`/tenants/current/members/${anaId}`)
+        .set(bearer(adminA))
+        .expect(204);
+
+      const res = await history(adminA, id).expect(200);
+      expect(res.body.data[0]).toMatchObject({
+        type: 'ASSIGNEE_CHANGED',
+        oldValue: anaId,
+        newValue: null,
+        actor: { id: adminId },
+      });
+    });
+
+    it('dos ediciones simultáneas dejan una cadena coherente de valores anterior y nuevo', async () => {
+      const { adminA, memberA, projectA } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Disputada',
+        }).expect(201)
+      ).body;
+
+      await Promise.all([
+        patch(adminA, id, { status: 'CLOSED' }),
+        patch(memberA, id, { status: 'IN_PROGRESS' }),
+      ]);
+
+      const res = await history(adminA, id).expect(200);
+      const [newer, older] = res.body.data.filter(
+        (e: { type: string }) => e.type === 'STATUS_CHANGED',
+      );
+      expect(older.oldValue).toBe('OPEN');
+      expect(newer.oldValue).toBe(older.newValue); // la segunda parte de lo que dejó la primera
+      const issue = await api()
+        .get(`/issues/${id}`)
+        .set(bearer(adminA))
+        .expect(200);
+      expect(issue.body.status).toBe(newer.newValue);
+    });
+
+    it('el historial se elimina junto con la incidencia', async () => {
+      const { adminA, projectA } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Efímera',
+        }).expect(201)
+      ).body;
+      await patch(adminA, id, { status: 'CLOSED' }).expect(200);
+
+      await api().delete(`/issues/${id}`).set(bearer(adminA)).expect(204);
+
+      expect(await prisma.issueEvent.count()).toBe(0);
+    });
+
+    it('valida el acceso y los identificadores', async () => {
+      const { adminA } = await setup();
+
+      await api().get(`/issues/${unknownId}/history`).expect(401);
+      await history(adminA, unknownId).expect(404);
+      await history(adminA, 'no-es-uuid').expect(400);
+    });
+
+    it('otra organización no puede ver el historial', async () => {
+      const { adminA, adminB, projectA } = await setup();
+      const { id } = (
+        await createIssue(adminA, {
+          projectId: projectA,
+          title: 'Privada',
+        }).expect(201)
+      ).body;
+
+      await history(adminB, id).expect(404);
+    });
+  });
 });
