@@ -11,7 +11,13 @@ vi.mock('../generated/prisma/client', () => ({
 
 describe('AuthController', () => {
   let controller: AuthController;
-  const authService = { register: vi.fn(), login: vi.fn() };
+  const authService = {
+    register: vi.fn(),
+    login: vi.fn(),
+    refresh: vi.fn(),
+    logout: vi.fn(),
+    logoutAll: vi.fn(),
+  };
 
   beforeEach(async () => {
     vi.resetAllMocks();
@@ -55,5 +61,44 @@ describe('AuthController', () => {
     const user = { sub: 'user-1', tenantId: 'tenant-1', role: 'ADMIN' };
 
     expect(controller.me({ user })).toEqual(user);
+  });
+
+  it('refresh delega en el servicio con el DTO completo', async () => {
+    const dto = { refreshToken: 'token', tenantId: 'tenant-1' };
+    authService.refresh.mockResolvedValue({
+      access_token: 'a',
+      refresh_token: 'r',
+    });
+
+    await expect(controller.refresh(dto)).resolves.toEqual({
+      access_token: 'a',
+      refresh_token: 'r',
+    });
+    expect(authService.refresh).toHaveBeenCalledWith(dto);
+  });
+
+  it('logout pasa solo el refresh token', async () => {
+    await controller.logout({ refreshToken: 'token' });
+
+    expect(authService.logout).toHaveBeenCalledWith('token');
+  });
+
+  it('logoutAll pasa el id del usuario autenticado, no el de la organización', async () => {
+    await controller.logoutAll({
+      sub: 'user-1',
+      tenantId: 'tenant-1',
+      role: 'ADMIN',
+    } as never);
+
+    expect(authService.logoutAll).toHaveBeenCalledWith('user-1');
+  });
+
+  it('refresh responde 200 y logout y logout-all responden 204', () => {
+    const code = (handler: keyof AuthController) =>
+      Reflect.getMetadata('__httpCode__', AuthController.prototype[handler]);
+
+    expect(code('refresh')).toBe(200);
+    expect(code('logout')).toBe(204);
+    expect(code('logoutAll')).toBe(204);
   });
 });

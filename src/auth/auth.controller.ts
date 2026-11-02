@@ -7,14 +7,17 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { AuthService } from './auth.service.js';
-import { AuthGuard } from './auth.guard.js';
-import { RegisterDto } from './dto/register.dto.js';
-import { LoginDto } from './dto/login.dto.js';
-import { SwitchTenantDto } from './dto/switch-tenant.dto.js';
 import { Throttle } from '@nestjs/throttler';
+import { type AuthUser, CurrentUser } from './auth-user.js';
+import { AuthGuard } from './auth.guard.js';
+import { AuthService } from './auth.service.js';
+import { LoginDto } from './dto/login.dto.js';
+import { RefreshDto, RefreshTokenDto } from './dto/refresh.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
+import { SwitchTenantDto } from './dto/switch-tenant.dto.js';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+const REFRESH_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
 
 @Controller('auth')
 export class AuthController {
@@ -44,5 +47,25 @@ export class AuthController {
   @HttpCode(200)
   switchTenant(@Req() req: any, @Body() dto: SwitchTenantDto) {
     return this.auth.switchTenant(req.user.sub, dto.tenantId);
+  }
+
+  @Throttle(REFRESH_THROTTLE)
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body() dto: RefreshDto) {
+    return this.auth.refresh(dto);
+  }
+
+  @Post('logout')
+  @HttpCode(204)
+  logout(@Body() dto: RefreshTokenDto) {
+    return this.auth.logout(dto.refreshToken);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post('logout-all')
+  @HttpCode(204)
+  logoutAll(@CurrentUser() user: AuthUser) {
+    return this.auth.logoutAll(user.sub);
   }
 }

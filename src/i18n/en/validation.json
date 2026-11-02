@@ -24,5 +24,6 @@
   "COMMENT_BODY_REQUIRED": "The comment cannot be empty",
   "COMMENT_BODY_MAX_LENGTH": "The comment must be at most {constraints.0} characters long",
   "SEARCH_INVALID": "The search text must be text",
-  "SEARCH_MAX_LENGTH": "The search text must be at most {constraints.0} characters long"
+  "SEARCH_MAX_LENGTH": "The search text must be at most {constraints.0} characters long",
+  "REFRESH_TOKEN_REQUIRED": "The refresh token is required"
 }

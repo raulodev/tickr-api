@@ -1,17 +1,25 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../prisma/prisma.service.js';
-import { Role } from '../generated/prisma/client.js';
-import { RegisterDto } from './dto/register.dto.js';
-import { LoginDto } from './dto/login.dto.js';
-import { t } from '../i18n/t.js';
+import { randomUUID } from 'node:crypto';
 import { generateSlug } from '../common/slug.js';
+import { Prisma, Role } from '../generated/prisma/client.js';
+import { t } from '../i18n/t.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { LoginDto } from './dto/login.dto.js';
+import { RefreshDto } from './dto/refresh.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
+import {
+  generateToken,
+  hashToken,
+  REFRESH_TOKEN_TTL_MS,
+  REVOKED_RETENTION_MS,
+} from './refresh-token.js';
 
 @Injectable()
 export class AuthService {
@@ -45,7 +53,7 @@ export class AuthService {
       });
     });
 
-    return this.signToken(user.id, user.memberships[0]);
+    return this.startSession(user.id, user.memberships[0]);
   }
 
   async login(dto: LoginDto) {
@@ -65,8 +73,10 @@ export class AuthService {
     const [membership] = user.memberships;
     if (!membership) throw new ForbiddenException(t('auth.NO_ORGANIZATION'));
 
+    await this.purgeStaleTokens(user.id);
+
     return {
-      ...(await this.signToken(user.id, membership)),
+      ...(await this.startSession(user.id, membership)),
       organizations: user.memberships.map((m) => ({
         id: m.tenant.id,
         name: m.tenant.name,
@@ -102,5 +112,127 @@ export class AuthService {
     membership: { tenantId: string; role: Role },
   ) {
     return this.signToken(userId, membership);
+  }
+
+  async refresh(dto: RefreshDto) {
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(dto.refreshToken) },
+    });
+    if (!stored)
+      throw new UnauthorizedException(t('auth.INVALID_REFRESH_TOKEN'));
+
+    if (stored.revokedAt) {
+      // Un token ya usado o revocado que vuelve a presentarse: posible robo. Se cierra toda la sesión.
+      await this.revokeFamily(stored.familyId);
+      throw new UnauthorizedException(t('auth.INVALID_REFRESH_TOKEN'));
+    }
+    if (stored.expiresAt <= new Date()) {
+      throw new UnauthorizedException(t('auth.INVALID_REFRESH_TOKEN'));
+    }
+
+    // La organización se resuelve antes de consumir el token: si falla, el cliente puede reintentar
+    const membership = await this.resolveMembership(
+      stored.userId,
+      dto.tenantId,
+    );
+
+    // Rotación atómica: solo una petición puede consumir este token
+    const refresh_token = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.refreshToken.updateMany({
+        where: { id: stored.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (count === 0) return null; // otra petición lo consumió primero
+      return this.createRefreshToken(tx, stored.userId, stored.familyId);
+    });
+
+    if (!refresh_token) {
+      await this.revokeFamily(stored.familyId);
+      throw new UnauthorizedException(t('auth.INVALID_REFRESH_TOKEN'));
+    }
+    return {
+      ...(await this.issueToken(stored.userId, membership)),
+      refresh_token,
+    };
+  }
+
+  /** Cierra la sesión a la que pertenece el token. Idempotente: un token desconocido no es un error. */
+  async logout(refreshToken: string) {
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(refreshToken) },
+    });
+    if (stored) await this.revokeFamily(stored.familyId);
+  }
+
+  async logoutAll(userId: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async startSession(
+    userId: string,
+    membership: { tenantId: string; role: Role },
+  ) {
+    const refresh_token = await this.createRefreshToken(
+      this.prisma,
+      userId,
+      randomUUID(),
+    );
+    return { ...(await this.issueToken(userId, membership)), refresh_token };
+  }
+
+  private async createRefreshToken(
+    db: Prisma.TransactionClient,
+    userId: string,
+    familyId: string,
+  ) {
+    const token = generateToken();
+    await db.refreshToken.create({
+      data: {
+        userId,
+        familyId,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+      },
+    });
+    return token;
+  }
+
+  private async resolveMembership(userId: string, tenantId?: string) {
+    if (tenantId) {
+      const membership = await this.prisma.membership.findUnique({
+        where: { userId_tenantId: { userId, tenantId } },
+      });
+      if (!membership) throw new ForbiddenException(t('auth.NOT_A_MEMBER'));
+      return membership;
+    }
+    const first = await this.prisma.membership.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!first) throw new ForbiddenException(t('auth.NO_ORGANIZATION'));
+    return first;
+  }
+
+  private revokeFamily(familyId: string) {
+    return this.prisma.refreshToken.updateMany({
+      where: { familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private purgeStaleTokens(userId: string) {
+    const now = Date.now();
+    return this.prisma.refreshToken.deleteMany({
+      where: {
+        userId,
+        OR: [
+          { expiresAt: { lt: new Date(now) } },
+          { revokedAt: { lt: new Date(now - REVOKED_RETENTION_MS) } },
+        ],
+      },
+    });
   }
 }

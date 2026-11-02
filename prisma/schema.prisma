@@ -22,16 +22,17 @@ model Tenant {
 }
 
 model User {
-  id             String       @id @default(uuid())
-  email          String       @unique
+  id             String         @id @default(uuid())
+  email          String         @unique
   password       String
   name           String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime       @default(now())
   memberships    Membership[]
-  reportedIssues Issue[]      @relation("IssueReporter")
-  assignedIssues Issue[]      @relation("IssueAssignee")
+  reportedIssues Issue[]        @relation("IssueReporter")
+  assignedIssues Issue[]        @relation("IssueAssignee")
   comments       Comment[]
   issueEvents    IssueEvent[]
+  refreshTokens  RefreshToken[]
 }
 
 model Membership {
@@ -142,4 +143,19 @@ model IssueEvent {
 
   @@index([tenantId, issueId, seq])
   @@index([actorId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  familyId  String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
 }

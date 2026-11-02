@@ -24,5 +24,6 @@
   "COMMENT_BODY_REQUIRED": "El comentario no puede estar vacío",
   "COMMENT_BODY_MAX_LENGTH": "El comentario no puede superar los {constraints.0} caracteres",
   "SEARCH_INVALID": "El texto de búsqueda debe ser texto",
-  "SEARCH_MAX_LENGTH": "El texto de búsqueda no puede superar los {constraints.0} caracteres"
+  "SEARCH_MAX_LENGTH": "El texto de búsqueda no puede superar los {constraints.0} caracteres",
+  "REFRESH_TOKEN_REQUIRED": "El token de renovación es obligatorio"
 }
