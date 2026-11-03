@@ -6,6 +6,7 @@ import {
   Post,
   Req,
   UseGuards,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -32,9 +33,14 @@ import { LoginDto } from './dto/login.dto.js';
 import { RefreshDto, RefreshTokenDto } from './dto/refresh.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { SwitchTenantDto } from './dto/switch-tenant.dto.js';
+import { MessageResponseDto } from './dto/message-response.dto.js';
+import { TokenDto } from './dto/token.dto.js';
+import { EmailDto } from './dto/email.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 const REFRESH_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
+const MAIL_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 
 @ApiTags('auth')
 @Controller('auth')
@@ -53,7 +59,7 @@ export class AuthController {
 
   @Throttle(AUTH_THROTTLE)
   @Post('login')
-  @HttpCode(200)
+  @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: AuthLoginResponseDto })
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
@@ -74,7 +80,7 @@ export class AuthController {
 
   @UseGuards(AuthGuard)
   @Post('switch-tenant')
-  @HttpCode(200)
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOkResponse({ type: AccessTokenResponseDto })
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
@@ -86,7 +92,7 @@ export class AuthController {
 
   @Throttle(REFRESH_THROTTLE)
   @Post('refresh')
-  @HttpCode(200)
+  @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: AuthSessionResponseDto })
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
@@ -97,7 +103,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @HttpCode(204)
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
   logout(@Body() dto: RefreshTokenDto) {
@@ -106,11 +112,47 @@ export class AuthController {
 
   @UseGuards(AuthGuard)
   @Post('logout-all')
-  @HttpCode(204)
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @ApiNoContentResponse()
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
   logoutAll(@CurrentUser() user: AuthUser) {
     return this.auth.logoutAll(user.sub);
+  }
+
+  @Throttle(AUTH_THROTTLE)
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: MessageResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  verifyEmail(@Body() dto: TokenDto) {
+    return this.auth.verifyEmail(dto.token);
+  }
+
+  @Throttle(MAIL_THROTTLE)
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: MessageResponseDto })
+  @ApiTooManyRequestsResponse({ type: ApiErrorResponseDto })
+  resendVerification(@Body() dto: EmailDto) {
+    return this.auth.resendVerification(dto.email);
+  }
+
+  @Throttle(MAIL_THROTTLE)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: MessageResponseDto })
+  @ApiTooManyRequestsResponse({ type: ApiErrorResponseDto })
+  forgotPassword(@Body() dto: EmailDto) {
+    return this.auth.forgotPassword(dto.email);
+  }
+
+  @Throttle(AUTH_THROTTLE)
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: MessageResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto);
   }
 }

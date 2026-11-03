@@ -1,0 +1,4 @@
+{
+  "VERIFY_EMAIL": { "subject": "Verifica tu correo en Tickr" },
+  "RESET_PASSWORD": { "subject": "Restablece tu contraseña de Tickr" }
+}

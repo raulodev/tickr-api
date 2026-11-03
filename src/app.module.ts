@@ -14,6 +14,8 @@ import { ProjectModule } from './project/project.module.js';
 import { TenantModule } from './tenant/tenant.module.js';
 import { UsersModule } from './users/users.module.js';
 import { HealthModule } from './health/health.module.js';
+import { mailTransport } from './mail/mail-transport.js';
+import { FileTemplateEngine, MailModule } from '@nestjs/mail';
 
 @Module({
   imports: [
@@ -43,6 +45,17 @@ import { HealthModule } from './health/health.module.js';
         { use: QueryResolver, options: ['lang'] }, // ?lang=es
         AcceptLanguageResolver, // Accept-Language: es
       ],
+    }),
+    MailModule.forRootAsync({
+      useFactory: () => ({
+        transport: mailTransport(),
+        templates: new FileTemplateEngine({
+          dir: join(import.meta.dirname, 'mail/templates'),
+          layout: 'layout',
+          cache: process.env.NODE_ENV === 'production',
+        }),
+        from: process.env.MAIL_FROM ?? 'Tickr <no-reply@example.com>',
+      }),
     }),
     PrismaModule,
     AuthModule,

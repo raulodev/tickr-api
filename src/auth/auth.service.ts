@@ -6,14 +6,18 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { I18nContext } from 'nestjs-i18n';
 import { randomUUID } from 'node:crypto';
 import { generateSlug } from '../common/slug.js';
-import { Prisma, Role } from '../generated/prisma/client.js';
+import { Prisma, Role, TokenType, User } from '../generated/prisma/client.js';
 import { t } from '../i18n/t.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { AuthMailService } from './auth-mail.service.js';
+import { AuthTokensService, HOUR_MS } from './auth-tokens.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshDto } from './dto/refresh.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import type { ResetPasswordDto } from './dto/reset-password.dto.js';
 import {
   generateToken,
   hashToken,
@@ -26,6 +30,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private readonly authMail: AuthMailService,
+    private readonly tokens: AuthTokensService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -234,5 +240,86 @@ export class AuthService {
         ],
       },
     });
+  }
+
+  async verifyEmail(token: string) {
+    const userId = await this.tokens.consume(
+      token,
+      TokenType.EMAIL_VERIFICATION,
+    );
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { emailVerifiedAt: new Date() },
+    });
+
+    return { message: t('auth.VERIFY_EMAIL_SUCCESS') };
+  }
+
+  async resendVerification(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (user && !user.emailVerifiedAt) {
+      void this.sendVerification(user);
+    }
+
+    return { message: t('auth.VERIFICATION_SENT') };
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return;
+    const locale = this.currentLocale();
+    const token = await this.tokens.issue(
+      user.id,
+      TokenType.PASSWORD_RESET,
+      HOUR_MS,
+    );
+    this.authMail.sendPasswordReset(user, token, locale);
+
+    return { message: t('auth.RESET_EMAIL_SENT') };
+  }
+
+  async resetPassword({ token, newPassword }: ResetPasswordDto) {
+    const userId = await this.tokens.consume(token, TokenType.PASSWORD_RESET);
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash, passwordChangedAt: now },
+      }),
+      // completar el reset demuestra que controla el correo
+      this.prisma.user.updateMany({
+        where: { id: userId, emailVerifiedAt: null },
+        data: { emailVerifiedAt: now },
+      }),
+    ]);
+
+    return { message: t('auth.PASSWORD_RESET_SUCCESS') };
+  }
+
+  private async sendVerification(user: User) {
+    const locale = this.currentLocale();
+    const token = await this.tokens.issue(
+      user.id,
+      TokenType.EMAIL_VERIFICATION,
+      24 * HOUR_MS,
+    );
+    await this.authMail.sendVerification(user, token, locale);
+  }
+
+  private assertEmailVerified(user: User): void {
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: 'EMAIL_NOT_VERIFIED',
+        message: t('auth.EMAIL_NOT_VERIFIED'),
+      });
+    }
+  }
+
+  /** Idioma de la petición en curso; se lee antes del envío en segundo plano. */
+  private currentLocale(): string {
+    return I18nContext.current()?.lang ?? 'en';
   }
 }

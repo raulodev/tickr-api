@@ -22,17 +22,20 @@ model Tenant {
 }
 
 model User {
-  id             String         @id @default(uuid())
-  email          String         @unique
-  password       String
-  name           String?
-  createdAt      DateTime       @default(now())
-  memberships    Membership[]
-  reportedIssues Issue[]        @relation("IssueReporter")
-  assignedIssues Issue[]        @relation("IssueAssignee")
-  comments       Comment[]
-  issueEvents    IssueEvent[]
-  refreshTokens  RefreshToken[]
+  id                String         @id @default(uuid())
+  email             String         @unique
+  password          String
+  name              String?
+  createdAt         DateTime       @default(now())
+  emailVerifiedAt   DateTime?
+  passwordChangedAt DateTime?
+  memberships       Membership[]
+  reportedIssues    Issue[]        @relation("IssueReporter")
+  assignedIssues    Issue[]        @relation("IssueAssignee")
+  comments          Comment[]
+  issueEvents       IssueEvent[]
+  refreshTokens     RefreshToken[]
+  authTokens        AuthToken[]
 }
 
 model Membership {
@@ -158,4 +161,22 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model AuthToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      TokenType
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, type])
 }
