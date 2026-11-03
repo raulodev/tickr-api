@@ -25,8 +25,7 @@ export function mailTransport(
         },
         tls: {
           rejectUnauthorized:
-            env.SMTP_REJECT_UNAUTHORIZED === 'true' ||
-            !!!env.SMTP_REJECT_UNAUTHORIZED,
+            env.SMTP_REJECT_UNAUTHORIZED === 'false' ? false : true,
         },
         url: required(env, 'SMTP_URL'),
         pool: true,
