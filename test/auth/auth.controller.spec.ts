@@ -17,6 +17,10 @@ describe('AuthController', () => {
     refresh: vi.fn(),
     logout: vi.fn(),
     logoutAll: vi.fn(),
+    verifyEmail: vi.fn(),
+    resendVerification: vi.fn(),
+    forgotPassword: vi.fn(),
+    resetPassword: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -91,6 +95,49 @@ describe('AuthController', () => {
     } as never);
 
     expect(authService.logoutAll).toHaveBeenCalledWith('user-1');
+  });
+
+  it('verifyEmail pasa el token y devuelve el resultado del servicio', async () => {
+    authService.verifyEmail.mockResolvedValue({ message: 'Email verificado' });
+
+    await expect(
+      controller.verifyEmail({ token: 'verify-token' }),
+    ).resolves.toEqual({ message: 'Email verificado' });
+    expect(authService.verifyEmail).toHaveBeenCalledWith('verify-token');
+  });
+
+  it('resendVerification pasa el correo y devuelve el resultado del servicio', async () => {
+    authService.resendVerification.mockResolvedValue({
+      message: 'Correo enviado',
+    });
+
+    await expect(
+      controller.resendVerification({ email: 'user@test.com' }),
+    ).resolves.toEqual({ message: 'Correo enviado' });
+    expect(authService.resendVerification).toHaveBeenCalledWith(
+      'user@test.com',
+    );
+  });
+
+  it('forgotPassword pasa el correo y devuelve el resultado del servicio', async () => {
+    authService.forgotPassword.mockResolvedValue({ message: 'Correo enviado' });
+
+    await expect(
+      controller.forgotPassword({ email: 'user@test.com' }),
+    ).resolves.toEqual({ message: 'Correo enviado' });
+    expect(authService.forgotPassword).toHaveBeenCalledWith('user@test.com');
+  });
+
+  it('resetPassword pasa el DTO completo y devuelve el resultado del servicio', async () => {
+    const dto = { token: 'reset-token', newPassword: 'new-password' };
+    authService.resetPassword.mockResolvedValue({
+      message: 'Clave actualizada',
+    });
+
+    await expect(controller.resetPassword(dto)).resolves.toEqual({
+      message: 'Clave actualizada',
+    });
+    expect(authService.resetPassword).toHaveBeenCalledWith(dto);
   });
 
   it('refresh responde 200 y logout y logout-all responden 204', () => {

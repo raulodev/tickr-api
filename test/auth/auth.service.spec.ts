@@ -8,6 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service.js';
+import { AuthMailService } from '../../src/auth/auth-mail.service.js';
+import { AuthTokensService } from '../../src/auth/auth-tokens.service.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { hashToken } from '../../src/auth/refresh-token.js';
 
@@ -74,6 +76,11 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
+        { provide: AuthMailService, useValue: { sendVerification: vi.fn() } },
+        {
+          provide: AuthTokensService,
+          useValue: { issue: vi.fn(), consume: vi.fn() },
+        },
       ],
     }).compile();
 
