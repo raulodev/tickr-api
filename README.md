@@ -50,7 +50,9 @@ variable to use a different port. Interactive API documentation is available at
 ## Features
 
 - Registration and sign-in; registration creates an organization and assigns
-  its creator the administrator role.
+  its creator the administrator role. Users must verify their email address
+  before they can sign in.
+- Email verification, verification email resend, and password recovery.
 - JWT authentication and switching between organizations the user belongs to.
 - Organization creation and member management with role-based permissions.
 - Project management with tenant-scoped project keys.
@@ -69,7 +71,7 @@ when the server is running.
 
 | Route | Description |
 | --- | --- |
-| `/auth` | Register, sign in, get the current user, and switch organizations. |
+| `/auth` | Register, verify email, sign in, recover a password, get the current user, and switch organizations. |
 | `/tenants` | Create organizations and manage current-organization members. |
 | `/projects` | Create, list, update, and delete projects. |
 | `/issues` | Create, list, update, and delete issues. |
