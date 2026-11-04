@@ -21,7 +21,7 @@ describe('Seguridad HTTP (e2e)', () => {
 
   const login = () =>
     api()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email: 'nadie@test.com', password: '12345678' });
 
   afterEach(async () => {
@@ -34,7 +34,7 @@ describe('Seguridad HTTP (e2e)', () => {
     it('añade las cabeceras de helmet y oculta X-Powered-By', async () => {
       await createApp();
 
-      const res = await api().get('/auth/me').expect(401);
+      const res = await api().get('/api/auth/me').expect(401);
 
       expect(res.headers['x-content-type-options']).toBe('nosniff');
       expect(res.headers['strict-transport-security']).toBeDefined();
@@ -50,7 +50,7 @@ describe('Seguridad HTTP (e2e)', () => {
       await createApp();
 
       const res = await api()
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Origin', allowed)
         .expect(401);
 
@@ -62,7 +62,7 @@ describe('Seguridad HTTP (e2e)', () => {
       await createApp();
 
       const res = await api()
-        .options('/projects')
+        .options('/api/projects')
         .set('Origin', other)
         .set('Access-Control-Request-Method', 'POST')
         .set(
@@ -83,7 +83,7 @@ describe('Seguridad HTTP (e2e)', () => {
       await createApp();
 
       const res = await api()
-        .options('/projects')
+        .options('/api/projects')
         .set('Origin', 'https://evil.example.com')
         .set('Access-Control-Request-Method', 'POST');
 
@@ -95,7 +95,7 @@ describe('Seguridad HTTP (e2e)', () => {
       await createApp();
 
       const res = await api()
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Origin', allowed)
         .expect(401);
 
@@ -142,9 +142,9 @@ describe('Seguridad HTTP (e2e)', () => {
 
       // El guard de límite se ejecuta antes que la validación: un cuerpo vacío también cuenta
       for (let i = 0; i < 5; i++) {
-        await api().post('/auth/register').send({}).expect(400);
+        await api().post('/api/auth/register').send({}).expect(400);
       }
-      await api().post('/auth/register').send({}).expect(429);
+      await api().post('/api/auth/register').send({}).expect(429);
     });
 
     it('agotar el login no afecta a otras rutas', async () => {
@@ -153,7 +153,7 @@ describe('Seguridad HTTP (e2e)', () => {
       await exhaustLogin();
       await login().expect(429);
 
-      await api().get('/auth/me').expect(401);
+      await api().get('/api/auth/me').expect(401);
     });
 
     it('con THROTTLE_DISABLED=true no limita', async () => {

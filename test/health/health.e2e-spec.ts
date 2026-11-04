@@ -29,7 +29,7 @@ describe('Health (e2e)', () => {
   it('GET /health/live responde 200 sin autenticación', async () => {
     await createApp();
 
-    const res = await api().get('/health/live').expect(200);
+    const res = await api().get('/api/health/live').expect(200);
 
     expect(res.body).toEqual({ status: 'ok' });
   });
@@ -37,7 +37,7 @@ describe('Health (e2e)', () => {
   it('GET /health/ready responde 200 con la base de datos disponible', async () => {
     await createApp();
 
-    const res = await api().get('/health/ready').expect(200);
+    const res = await api().get('/api/health/ready').expect(200);
 
     expect(res.body).toEqual({ status: 'ok', checks: { database: 'up' } });
   });
@@ -49,7 +49,7 @@ describe('Health (e2e)', () => {
       new Error('password authentication failed for user "raul"'),
     );
 
-    const res = await api().get('/health/ready').expect(503);
+    const res = await api().get('/api/health/ready').expect(503);
 
     expect(res.body).toMatchObject({
       status: 'error',
@@ -64,10 +64,10 @@ describe('Health (e2e)', () => {
     await createApp();
 
     for (let i = 0; i < 6; i++) {
-      await api().get('/health/live').expect(200);
+      await api().get('/api/health/live').expect(200);
     }
     // Comprobación de que el límite sí está activo en otras rutas
-    for (let i = 0; i < 3; i++) await api().get('/auth/me').expect(401);
-    await api().get('/auth/me').expect(429);
+    for (let i = 0; i < 3; i++) await api().get('/api/auth/me').expect(401);
+    await api().get('/api/auth/me').expect(429);
   });
 });

@@ -67,123 +67,136 @@ describe('OpenAPI', () => {
   });
 
   it('documenta las respuestas DTO de auth y health con sus códigos HTTP', () => {
-    expect(responseSchema(document, '/auth/register', 'post', '201')).toEqual({
+    expect(
+      responseSchema(document, '/api/auth/register', 'post', '201'),
+    ).toEqual({
       $ref: '#/components/schemas/AuthSessionResponseDto',
     });
-    expect(responseSchema(document, '/auth/login', 'post', '200')).toEqual({
+    expect(responseSchema(document, '/api/auth/login', 'post', '200')).toEqual({
       $ref: '#/components/schemas/AuthLoginResponseDto',
     });
-    expect(responseSchema(document, '/auth/me', 'get', '200')).toEqual({
+    expect(responseSchema(document, '/api/auth/me', 'get', '200')).toEqual({
       $ref: '#/components/schemas/AuthUserResponseDto',
     });
     expect(
-      responseSchema(document, '/auth/switch-tenant', 'post', '200'),
+      responseSchema(document, '/api/auth/switch-tenant', 'post', '200'),
     ).toEqual({ $ref: '#/components/schemas/AccessTokenResponseDto' });
-    expect(responseSchema(document, '/auth/refresh', 'post', '200')).toEqual({
+    expect(
+      responseSchema(document, '/api/auth/refresh', 'post', '200'),
+    ).toEqual({
       $ref: '#/components/schemas/AuthSessionResponseDto',
     });
-    expect(responseSchema(document, '/auth/logout', 'post', '204')).toBe(
+    expect(responseSchema(document, '/api/auth/logout', 'post', '204')).toBe(
       undefined,
     );
-    expect(responseSchema(document, '/health/live', 'get', '200')).toEqual({
+    expect(responseSchema(document, '/api/health/live', 'get', '200')).toEqual({
       $ref: '#/components/schemas/HealthLiveResponseDto',
     });
-    expect(responseSchema(document, '/health/ready', 'get', '200')).toEqual({
-      $ref: '#/components/schemas/HealthReadinessResponseDto',
-    });
-    expect(responseSchema(document, '/health/ready', 'get', '503')).toEqual({
-      $ref: '#/components/schemas/HealthReadinessResponseDto',
-    });
-    expect(document.paths?.['/auth/login']?.post?.responses?.['401']).toBeDefined();
-    expect(document.paths?.['/auth/login']?.post?.responses?.['429']).toBeDefined();
+    expect(responseSchema(document, '/api/health/ready', 'get', '200')).toEqual(
+      {
+        $ref: '#/components/schemas/HealthReadinessResponseDto',
+      },
+    );
+    expect(responseSchema(document, '/api/health/ready', 'get', '503')).toEqual(
+      {
+        $ref: '#/components/schemas/HealthReadinessResponseDto',
+      },
+    );
+    expect(
+      document.paths?.['/api/auth/login']?.post?.responses?.['401'],
+    ).toBeDefined();
+    expect(
+      document.paths?.['/api/auth/login']?.post?.responses?.['429'],
+    ).toBeDefined();
   });
 
   it('documenta una respuesta exitosa para cada endpoint', () => {
     const endpoints = [
-      ['/auth/register', 'post', '201'],
-      ['/auth/login', 'post', '200'],
-      ['/auth/me', 'get', '200'],
-      ['/auth/switch-tenant', 'post', '200'],
-      ['/auth/refresh', 'post', '200'],
-      ['/auth/logout', 'post', '204'],
-      ['/auth/logout-all', 'post', '204'],
-      ['/health/live', 'get', '200'],
-      ['/health/ready', 'get', '200'],
-      ['/issues', 'get', '200'],
-      ['/issues', 'post', '201'],
-      ['/issues/{id}', 'get', '200'],
-      ['/issues/{id}', 'patch', '200'],
-      ['/issues/{id}', 'delete', '204'],
-      ['/issues/{id}/history', 'get', '200'],
-      ['/issues/{issueId}/comments', 'get', '200'],
-      ['/issues/{issueId}/comments', 'post', '201'],
-      ['/comments/{id}', 'patch', '200'],
-      ['/comments/{id}', 'delete', '204'],
-      ['/projects', 'get', '200'],
-      ['/projects', 'post', '201'],
-      ['/projects/{id}', 'get', '200'],
-      ['/projects/{id}', 'patch', '200'],
-      ['/projects/{id}', 'delete', '204'],
-      ['/tenants', 'post', '201'],
-      ['/tenants/current/members', 'get', '200'],
-      ['/tenants/current/members', 'post', '201'],
-      ['/tenants/current/members/{userId}', 'delete', '204'],
-      ['/tenants/current/members/{userId}', 'patch', '200'],
+      ['/api/auth/register', 'post', '201'],
+      ['/api/auth/login', 'post', '200'],
+      ['/api/auth/me', 'get', '200'],
+      ['/api/auth/switch-tenant', 'post', '200'],
+      ['/api/auth/refresh', 'post', '200'],
+      ['/api/auth/logout', 'post', '204'],
+      ['/api/auth/logout-all', 'post', '204'],
+      ['/api/health/live', 'get', '200'],
+      ['/api/health/ready', 'get', '200'],
+      ['/api/issues', 'get', '200'],
+      ['/api/issues', 'post', '201'],
+      ['/api/issues/{id}', 'get', '200'],
+      ['/api/issues/{id}', 'patch', '200'],
+      ['/api/issues/{id}', 'delete', '204'],
+      ['/api/issues/{id}/history', 'get', '200'],
+      ['/api/issues/{issueId}/comments', 'get', '200'],
+      ['/api/issues/{issueId}/comments', 'post', '201'],
+      ['/api/comments/{id}', 'patch', '200'],
+      ['/api/comments/{id}', 'delete', '204'],
+      ['/api/projects', 'get', '200'],
+      ['/api/projects', 'post', '201'],
+      ['/api/projects/{id}', 'get', '200'],
+      ['/api/projects/{id}', 'patch', '200'],
+      ['/api/projects/{id}', 'delete', '204'],
+      ['/api/tenants', 'post', '201'],
+      ['/api/tenants/current/members', 'get', '200'],
+      ['/api/tenants/current/members', 'post', '201'],
+      ['/api/tenants/current/members/{userId}', 'delete', '204'],
+      ['/api/tenants/current/members/{userId}', 'patch', '200'],
     ] as const;
 
     for (const [path, method, statusCode] of endpoints) {
-      expect(document.paths?.[path]?.[method]?.responses[statusCode]).toBeDefined();
+      expect(
+        document.paths?.[path]?.[method]?.responses[statusCode],
+      ).toBeDefined();
     }
 
     expect(
-      document.paths?.['/issues/{id}']?.delete?.responses['204']?.content,
+      document.paths?.['/api/issues/{id}']?.delete?.responses['204']?.content,
     ).toBeUndefined();
     expect(
-      document.paths?.['/comments/{id}']?.delete?.responses['204']?.content,
+      document.paths?.['/api/comments/{id}']?.delete?.responses['204']?.content,
     ).toBeUndefined();
     expect(
-      document.paths?.['/projects/{id}']?.delete?.responses['204']?.content,
+      document.paths?.['/api/projects/{id}']?.delete?.responses['204']?.content,
     ).toBeUndefined();
     expect(
-      document.paths?.['/tenants/current/members/{userId}']?.delete?.responses[
-        '204'
-      ]?.content,
+      document.paths?.['/api/tenants/current/members/{userId}']?.delete
+        ?.responses['204']?.content,
     ).toBeUndefined();
   });
 
   it('documenta los DTOs de issues, comentarios, proyectos y tenants', () => {
-    expect(responseSchema(document, '/issues', 'get', '200')).toEqual({
+    expect(responseSchema(document, '/api/issues', 'get', '200')).toEqual({
       $ref: '#/components/schemas/IssueListResponseDto',
     });
-    expect(responseSchema(document, '/issues', 'post', '201')).toEqual({
+    expect(responseSchema(document, '/api/issues', 'post', '201')).toEqual({
       $ref: '#/components/schemas/IssueResponseDto',
     });
     expect(
-      responseSchema(document, '/issues/{id}/history', 'get', '200'),
+      responseSchema(document, '/api/issues/{id}/history', 'get', '200'),
     ).toEqual({ $ref: '#/components/schemas/IssueHistoryResponseDto' });
     expect(
-      responseSchema(document, '/issues/{issueId}/comments', 'get', '200'),
+      responseSchema(document, '/api/issues/{issueId}/comments', 'get', '200'),
     ).toEqual({ $ref: '#/components/schemas/CommentListResponseDto' });
     expect(
-      responseSchema(document, '/issues/{issueId}/comments', 'post', '201'),
+      responseSchema(document, '/api/issues/{issueId}/comments', 'post', '201'),
     ).toEqual({ $ref: '#/components/schemas/CommentResponseDto' });
-    expect(responseSchema(document, '/projects', 'get', '200')).toEqual({
+    expect(responseSchema(document, '/api/projects', 'get', '200')).toEqual({
       $ref: '#/components/schemas/ProjectListResponseDto',
     });
-    expect(responseSchema(document, '/projects', 'post', '201')).toEqual({
+    expect(responseSchema(document, '/api/projects', 'post', '201')).toEqual({
       $ref: '#/components/schemas/ProjectResponseDto',
     });
+    expect(responseSchema(document, '/api/tenants', 'post', '201')).toEqual({
+      $ref: '#/components/schemas/CreateTenantResponseDto',
+    });
     expect(
-      responseSchema(document, '/tenants', 'post', '201'),
-    ).toEqual({ $ref: '#/components/schemas/CreateTenantResponseDto' });
-    expect(
-      responseSchema(document, '/tenants/current/members', 'get', '200'),
+      responseSchema(document, '/api/tenants/current/members', 'get', '200'),
     ).toMatchObject({
       type: 'array',
       items: { $ref: '#/components/schemas/TenantMemberResponseDto' },
     });
     expect(
-      responseSchema(document, '/tenants/current/members', 'post', '201'),
+      responseSchema(document, '/api/tenants/current/members', 'post', '201'),
     ).toEqual({ $ref: '#/components/schemas/TenantMemberResponseDto' });
   });
 
@@ -200,9 +213,11 @@ describe('OpenAPI', () => {
   });
 
   it('usa el DTO común de error y documenta estados de error relevantes', () => {
-    const responses = document.paths?.['/projects']?.post?.responses;
+    const responses = document.paths?.['/api/projects']?.post?.responses;
 
-    expect(document.components?.schemas?.ApiErrorResponseDto?.properties).toMatchObject({
+    expect(
+      document.components?.schemas?.ApiErrorResponseDto?.properties,
+    ).toMatchObject({
       statusCode: { type: 'number' },
       message: {
         oneOf: [

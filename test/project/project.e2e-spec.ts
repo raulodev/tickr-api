@@ -16,13 +16,13 @@ describe('Projects (e2e)', () => {
   const registerUser = async (email: string) =>
     (
       await api()
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
         .expect(201)
     ).body.access_token as string;
 
   const createProject = (token: string, name = 'Tickr', key = 'TKR') =>
-    api().post('/projects').set(bearer(token)).send({ name, key });
+    api().post('/api/projects').set(bearer(token)).send({ name, key });
 
   /** Dos organizaciones, y un miembro sin rol admin en la A */
   const setup = async () => {
@@ -31,16 +31,16 @@ describe('Projects (e2e)', () => {
     const anaOwn = await registerUser('ana@test.com');
 
     const { tenantId } = (
-      await api().get('/auth/me').set(bearer(adminA)).expect(200)
+      await api().get('/api/auth/me').set(bearer(adminA)).expect(200)
     ).body;
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(adminA))
       .send({ email: 'ana@test.com' })
       .expect(201);
     const memberA = (
       await api()
-        .post('/auth/switch-tenant')
+        .post('/api/auth/switch-tenant')
         .set(bearer(anaOwn))
         .send({ tenantId })
         .expect(200)
@@ -74,7 +74,7 @@ describe('Projects (e2e)', () => {
   });
 
   it('responde 401 sin token', async () => {
-    await api().get('/projects').expect(401);
+    await api().get('/api/projects').expect(401);
   });
 
   it('un admin crea un proyecto y la clave se normaliza a mayúsculas', async () => {
@@ -83,7 +83,10 @@ describe('Projects (e2e)', () => {
     const res = await createProject(adminA, 'Tickr', 'tkr').expect(201);
     expect(res.body).toMatchObject({ name: 'Tickr', key: 'TKR' });
 
-    const list = await api().get('/projects').set(bearer(adminA)).expect(200);
+    const list = await api()
+      .get('/api/projects')
+      .set(bearer(adminA))
+      .expect(200);
     expect(list.body.data).toHaveLength(1);
     expect(list.body.meta).toEqual({ total: 1, page: 1, limit: 20 });
   });
@@ -109,15 +112,15 @@ describe('Projects (e2e)', () => {
     const { adminA, memberA } = await setup();
     const { id } = (await createProject(adminA).expect(201)).body;
 
-    await api().get('/projects').set(bearer(memberA)).expect(200);
-    await api().get(`/projects/${id}`).set(bearer(memberA)).expect(200);
+    await api().get('/api/projects').set(bearer(memberA)).expect(200);
+    await api().get(`/api/projects/${id}`).set(bearer(memberA)).expect(200);
     await createProject(memberA, 'X', 'XX').expect(403);
     await api()
-      .patch(`/projects/${id}`)
+      .patch(`/api/projects/${id}`)
       .set(bearer(memberA))
       .send({ name: 'Nuevo' })
       .expect(403);
-    await api().delete(`/projects/${id}`).set(bearer(memberA)).expect(403);
+    await api().delete(`/api/projects/${id}`).set(bearer(memberA)).expect(403);
   });
 
   it('actualiza el nombre pero nunca la clave', async () => {
@@ -125,7 +128,7 @@ describe('Projects (e2e)', () => {
     const { id } = (await createProject(adminA).expect(201)).body;
 
     const res = await api()
-      .patch(`/projects/${id}`)
+      .patch(`/api/projects/${id}`)
       .set(bearer(adminA))
       .send({ name: 'Renombrado', key: 'ZZ' })
       .expect(200);
@@ -137,8 +140,8 @@ describe('Projects (e2e)', () => {
     const { adminA } = await setup();
     const { id } = (await createProject(adminA).expect(201)).body;
 
-    await api().delete(`/projects/${id}`).set(bearer(adminA)).expect(204);
-    await api().get(`/projects/${id}`).set(bearer(adminA)).expect(404);
+    await api().delete(`/api/projects/${id}`).set(bearer(adminA)).expect(204);
+    await api().get(`/api/projects/${id}`).set(bearer(adminA)).expect(404);
   });
 
   it('pagina los resultados', async () => {
@@ -148,13 +151,13 @@ describe('Projects (e2e)', () => {
     }
 
     const res = await api()
-      .get('/projects?page=2&limit=2')
+      .get('/api/projects?page=2&limit=2')
       .set(bearer(adminA))
       .expect(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.meta).toEqual({ total: 3, page: 2, limit: 2 });
 
-    await api().get('/projects?limit=1000').set(bearer(adminA)).expect(400);
+    await api().get('/api/projects?limit=1000').set(bearer(adminA)).expect(400);
   });
 
   describe('aislamiento entre organizaciones', () => {
@@ -162,16 +165,19 @@ describe('Projects (e2e)', () => {
       const { adminA, adminB } = await setup();
       const { id } = (await createProject(adminA).expect(201)).body;
 
-      const list = await api().get('/projects').set(bearer(adminB)).expect(200);
+      const list = await api()
+        .get('/api/projects')
+        .set(bearer(adminB))
+        .expect(200);
       expect(list.body.data).toEqual([]);
 
-      await api().get(`/projects/${id}`).set(bearer(adminB)).expect(404);
+      await api().get(`/api/projects/${id}`).set(bearer(adminB)).expect(404);
       await api()
-        .patch(`/projects/${id}`)
+        .patch(`/api/projects/${id}`)
         .set(bearer(adminB))
         .send({ name: 'hack' })
         .expect(404);
-      await api().delete(`/projects/${id}`).set(bearer(adminB)).expect(404);
+      await api().delete(`/api/projects/${id}`).set(bearer(adminB)).expect(404);
 
       const intact = await prisma.project.findUniqueOrThrow({ where: { id } });
       expect(intact.name).toBe('Tickr');
@@ -182,11 +188,11 @@ describe('Projects (e2e)', () => {
       const { id } = (await createProject(adminA).expect(201)).body;
 
       const foreign = await api()
-        .get(`/projects/${id}`)
+        .get(`/api/projects/${id}`)
         .set(bearer(adminB))
         .expect(404);
       const missing = await api()
-        .get('/projects/00000000-0000-4000-8000-000000000000')
+        .get('/api/projects/00000000-0000-4000-8000-000000000000')
         .set(bearer(adminB))
         .expect(404);
       expect(foreign.body).toEqual(missing.body);

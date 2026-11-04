@@ -12,21 +12,21 @@ describe('Issues (e2e)', () => {
 
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const me = (token: string) => api().get('/auth/me').set(bearer(token));
+  const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
 
   const registerUser = async (email: string) =>
     (
       await api()
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
         .expect(201)
     ).body.access_token as string;
 
   const createProject = (token: string, name: string, key: string) =>
-    api().post('/projects').set(bearer(token)).send({ name, key });
+    api().post('/api/projects').set(bearer(token)).send({ name, key });
 
   const createIssue = (token: string, body: Record<string, unknown>) =>
-    api().post('/issues').set(bearer(token)).send(body);
+    api().post('/api/issues').set(bearer(token)).send(body);
 
   /** Org A (admin + Ana como miembro) y org B (admin), con un proyecto en cada una */
   const setup = async () => {
@@ -40,13 +40,13 @@ describe('Issues (e2e)', () => {
     const { sub: anaId } = (await me(anaOwn).expect(200)).body;
 
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(adminA))
       .send({ email: 'ana@test.com' })
       .expect(201);
     const memberA = (
       await api()
-        .post('/auth/switch-tenant')
+        .post('/api/auth/switch-tenant')
         .set(bearer(anaOwn))
         .send({ tenantId: tenantA })
         .expect(200)
@@ -96,7 +96,7 @@ describe('Issues (e2e)', () => {
   });
 
   it('responde 401 sin token', async () => {
-    await api().get('/issues').expect(401);
+    await api().get('/api/issues').expect(401);
   });
 
   describe('creación y numeración', () => {
@@ -222,12 +222,12 @@ describe('Issues (e2e)', () => {
       ).body;
 
       await api()
-        .delete(`/tenants/current/members/${anaId}`)
+        .delete(`/api/tenants/current/members/${anaId}`)
         .set(bearer(adminA))
         .expect(204);
 
       const issue = await api()
-        .get(`/issues/${id}`)
+        .get(`/api/issues/${id}`)
         .set(bearer(adminA))
         .expect(200);
       expect(issue.body.assigneeId).toBeNull();
@@ -262,13 +262,13 @@ describe('Issues (e2e)', () => {
         201,
       );
       await api()
-        .patch(`/issues/${one.id}`)
+        .patch(`/api/issues/${one.id}`)
         .set(bearer(adminA))
         .send({ status: 'IN_PROGRESS' })
         .expect(200);
 
       const list = (query: string) =>
-        api().get(`/issues?${query}`).set(bearer(adminA)).expect(200);
+        api().get(`/api/issues?${query}`).set(bearer(adminA)).expect(200);
 
       expect((await list('')).body.meta.total).toBe(4);
       expect((await list(`projectId=${projectA}`)).body.meta.total).toBe(3);
@@ -280,7 +280,10 @@ describe('Issues (e2e)', () => {
       expect(page.body.data).toHaveLength(1);
       expect(page.body.meta).toEqual({ total: 3, page: 2, limit: 2 });
 
-      await api().get('/issues?status=NOPE').set(bearer(adminA)).expect(400);
+      await api()
+        .get('/api/issues?status=NOPE')
+        .set(bearer(adminA))
+        .expect(400);
     });
   });
 
@@ -295,7 +298,7 @@ describe('Issues (e2e)', () => {
       ).body;
 
       const res = await api()
-        .patch(`/issues/${id}`)
+        .patch(`/api/issues/${id}`)
         .set(bearer(memberA))
         .send({
           title: 'Nuevo título',
@@ -328,7 +331,7 @@ describe('Issues (e2e)', () => {
       ).body;
 
       const res = await api()
-        .patch(`/issues/${id}`)
+        .patch(`/api/issues/${id}`)
         .set(bearer(adminA))
         .send({ assigneeId: null })
         .expect(200);
@@ -344,9 +347,9 @@ describe('Issues (e2e)', () => {
         }).expect(201)
       ).body;
 
-      await api().delete(`/issues/${id}`).set(bearer(memberA)).expect(403);
-      await api().delete(`/issues/${id}`).set(bearer(adminA)).expect(204);
-      await api().get(`/issues/${id}`).set(bearer(adminA)).expect(404);
+      await api().delete(`/api/issues/${id}`).set(bearer(memberA)).expect(403);
+      await api().delete(`/api/issues/${id}`).set(bearer(adminA)).expect(204);
+      await api().get(`/api/issues/${id}`).set(bearer(adminA)).expect(404);
     });
   });
 
@@ -360,21 +363,24 @@ describe('Issues (e2e)', () => {
         }).expect(201)
       ).body;
 
-      const list = await api().get('/issues').set(bearer(adminB)).expect(200);
+      const list = await api()
+        .get('/api/issues')
+        .set(bearer(adminB))
+        .expect(200);
       expect(list.body.data).toEqual([]);
       const byProject = await api()
-        .get(`/issues?projectId=${projectA}`)
+        .get(`/api/issues?projectId=${projectA}`)
         .set(bearer(adminB))
         .expect(200);
       expect(byProject.body.data).toEqual([]);
 
-      await api().get(`/issues/${id}`).set(bearer(adminB)).expect(404);
+      await api().get(`/api/issues/${id}`).set(bearer(adminB)).expect(404);
       await api()
-        .patch(`/issues/${id}`)
+        .patch(`/api/issues/${id}`)
         .set(bearer(adminB))
         .send({ title: 'hack' })
         .expect(404);
-      await api().delete(`/issues/${id}`).set(bearer(adminB)).expect(404);
+      await api().delete(`/api/issues/${id}`).set(bearer(adminB)).expect(404);
 
       const intact = await prisma.issue.findUniqueOrThrow({ where: { id } });
       expect(intact.title).toBe('Privada');
@@ -415,7 +421,7 @@ describe('Issues (e2e)', () => {
       extra: Record<string, string> = {},
     ) =>
       api()
-        .get('/issues')
+        .get('/api/issues')
         .query({ q, ...extra })
         .set(bearer(token));
 
@@ -504,7 +510,7 @@ describe('Issues (e2e)', () => {
       await seed(adminA, projectA);
       const first = (await search(adminA, 'tkr-1').expect(200)).body.data[0];
       await api()
-        .patch(`/issues/${first.id}`)
+        .patch(`/api/issues/${first.id}`)
         .set(bearer(adminA))
         .send({ status: 'CLOSED' })
         .expect(200);
@@ -534,7 +540,7 @@ describe('Issues (e2e)', () => {
       const { adminA } = await setup();
 
       await search(adminA, 'x'.repeat(101)).expect(400);
-      await api().get('/issues?q=a&q=b').set(bearer(adminA)).expect(400);
+      await api().get('/api/issues?q=a&q=b').set(bearer(adminA)).expect(400);
 
       const res = await search(adminA, 'x'.repeat(101))
         .set('Accept-Language', 'es')
@@ -572,9 +578,9 @@ describe('Issues (e2e)', () => {
       token: string,
       id: string,
       query: Record<string, string> = {},
-    ) => api().get(`/issues/${id}/history`).query(query).set(bearer(token));
+    ) => api().get(`/api/issues/${id}/history`).query(query).set(bearer(token));
     const patch = (token: string, id: string, body: Record<string, unknown>) =>
-      api().patch(`/issues/${id}`).set(bearer(token)).send(body);
+      api().patch(`/api/issues/${id}`).set(bearer(token)).send(body);
     const typesOf = (res: { body: { data: { type: string }[] } }) =>
       res.body.data.map((event) => event.type);
 
@@ -720,7 +726,7 @@ describe('Issues (e2e)', () => {
       ).body;
 
       await api()
-        .delete(`/tenants/current/members/${anaId}`)
+        .delete(`/api/tenants/current/members/${anaId}`)
         .set(bearer(adminA))
         .expect(204);
 
@@ -754,7 +760,7 @@ describe('Issues (e2e)', () => {
       expect(older.oldValue).toBe('OPEN');
       expect(newer.oldValue).toBe(older.newValue); // la segunda parte de lo que dejó la primera
       const issue = await api()
-        .get(`/issues/${id}`)
+        .get(`/api/issues/${id}`)
         .set(bearer(adminA))
         .expect(200);
       expect(issue.body.status).toBe(newer.newValue);
@@ -770,7 +776,7 @@ describe('Issues (e2e)', () => {
       ).body;
       await patch(adminA, id, { status: 'CLOSED' }).expect(200);
 
-      await api().delete(`/issues/${id}`).set(bearer(adminA)).expect(204);
+      await api().delete(`/api/issues/${id}`).set(bearer(adminA)).expect(204);
 
       expect(await prisma.issueEvent.count()).toBe(0);
     });
@@ -778,7 +784,7 @@ describe('Issues (e2e)', () => {
     it('valida el acceso y los identificadores', async () => {
       const { adminA } = await setup();
 
-      await api().get(`/issues/${unknownId}/history`).expect(401);
+      await api().get(`/api/issues/${unknownId}/history`).expect(401);
       await history(adminA, unknownId).expect(404);
       await history(adminA, 'no-es-uuid').expect(400);
     });

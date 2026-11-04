@@ -12,19 +12,22 @@ describe('Comments (e2e)', () => {
 
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const me = (token: string) => api().get('/auth/me').set(bearer(token));
+  const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
   const unknownId = '00000000-0000-4000-8000-000000000000';
 
   const registerUser = async (email: string) =>
     (
       await api()
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
         .expect(201)
     ).body.access_token as string;
 
   const addComment = (token: string, issueId: string, body: unknown) =>
-    api().post(`/issues/${issueId}/comments`).set(bearer(token)).send({ body });
+    api()
+      .post(`/api/issues/${issueId}/comments`)
+      .set(bearer(token))
+      .send({ body });
 
   /** Org A (admin + Ana como miembro) con una incidencia, y org B (admin) */
   const setup = async () => {
@@ -38,13 +41,13 @@ describe('Comments (e2e)', () => {
     const { sub: anaId } = (await me(anaOwn).expect(200)).body;
 
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(adminA))
       .send({ email: 'ana@test.com' })
       .expect(201);
     const memberA = (
       await api()
-        .post('/auth/switch-tenant')
+        .post('/api/auth/switch-tenant')
         .set(bearer(anaOwn))
         .send({ tenantId: tenantA })
         .expect(200)
@@ -52,14 +55,14 @@ describe('Comments (e2e)', () => {
 
     const projectId = (
       await api()
-        .post('/projects')
+        .post('/api/projects')
         .set(bearer(adminA))
         .send({ name: 'Tickr', key: 'TKR' })
         .expect(201)
     ).body.id as string;
     const issueId = (
       await api()
-        .post('/issues')
+        .post('/api/issues')
         .set(bearer(adminA))
         .send({ projectId, title: 'Bug' })
         .expect(201)
@@ -95,8 +98,11 @@ describe('Comments (e2e)', () => {
   });
 
   it('responde 401 sin token', async () => {
-    await api().get(`/issues/${unknownId}/comments`).expect(401);
-    await api().patch(`/comments/${unknownId}`).send({ body: 'x' }).expect(401);
+    await api().get(`/api/issues/${unknownId}/comments`).expect(401);
+    await api()
+      .patch(`/api/comments/${unknownId}`)
+      .send({ body: 'x' })
+      .expect(401);
   });
 
   describe('crear y listar', () => {
@@ -116,7 +122,7 @@ describe('Comments (e2e)', () => {
       });
 
       const list = await api()
-        .get(`/issues/${issueId}/comments`)
+        .get(`/api/issues/${issueId}/comments`)
         .set(bearer(memberA))
         .expect(200);
       expect(list.body.data).toHaveLength(1);
@@ -137,7 +143,7 @@ describe('Comments (e2e)', () => {
       await addComment(adminA, issueId, '    ').expect(400);
       await addComment(adminA, issueId, 'x'.repeat(5001)).expect(400);
       await api()
-        .post(`/issues/${issueId}/comments`)
+        .post(`/api/issues/${issueId}/comments`)
         .set(bearer(adminA))
         .send({})
         .expect(400);
@@ -155,7 +161,7 @@ describe('Comments (e2e)', () => {
       }
 
       const first = await api()
-        .get(`/issues/${issueId}/comments?limit=2`)
+        .get(`/api/issues/${issueId}/comments?limit=2`)
         .set(bearer(adminA))
         .expect(200);
       expect(first.body.data.map((c: { body: string }) => c.body)).toEqual([
@@ -164,7 +170,7 @@ describe('Comments (e2e)', () => {
       ]);
 
       const second = await api()
-        .get(`/issues/${issueId}/comments?page=2&limit=2`)
+        .get(`/api/issues/${issueId}/comments?page=2&limit=2`)
         .set(bearer(adminA))
         .expect(200);
       expect(second.body.data.map((c: { body: string }) => c.body)).toEqual([
@@ -177,12 +183,12 @@ describe('Comments (e2e)', () => {
       const { adminA } = await setup();
 
       await api()
-        .get(`/issues/${unknownId}/comments`)
+        .get(`/api/issues/${unknownId}/comments`)
         .set(bearer(adminA))
         .expect(404);
       await addComment(adminA, unknownId, 'hola').expect(404);
       await api()
-        .get('/issues/no-es-uuid/comments')
+        .get('/api/issues/no-es-uuid/comments')
         .set(bearer(adminA))
         .expect(400);
     });
@@ -196,7 +202,7 @@ describe('Comments (e2e)', () => {
       ).body;
 
       const res = await api()
-        .patch(`/comments/${id}`)
+        .patch(`/api/comments/${id}`)
         .set(bearer(memberA))
         .send({ body: 'Editado' })
         .expect(200);
@@ -209,7 +215,7 @@ describe('Comments (e2e)', () => {
         .body;
 
       await api()
-        .patch(`/comments/${id}`)
+        .patch(`/api/comments/${id}`)
         .set(bearer(adminA))
         .send({ body: 'hack' })
         .expect(403);
@@ -226,8 +232,14 @@ describe('Comments (e2e)', () => {
         await addComment(memberA, issueId, 'Moderable').expect(201)
       ).body.id as string;
 
-      await api().delete(`/comments/${own}`).set(bearer(memberA)).expect(204);
-      await api().delete(`/comments/${other}`).set(bearer(adminA)).expect(204);
+      await api()
+        .delete(`/api/comments/${own}`)
+        .set(bearer(memberA))
+        .expect(204);
+      await api()
+        .delete(`/api/comments/${other}`)
+        .set(bearer(adminA))
+        .expect(204);
 
       expect(await prisma.comment.count()).toBe(0);
     });
@@ -238,7 +250,10 @@ describe('Comments (e2e)', () => {
         await addComment(adminA, issueId, 'Del admin').expect(201)
       ).body;
 
-      await api().delete(`/comments/${id}`).set(bearer(memberA)).expect(403);
+      await api()
+        .delete(`/api/comments/${id}`)
+        .set(bearer(memberA))
+        .expect(403);
       expect(await prisma.comment.count()).toBe(1);
     });
 
@@ -246,12 +261,12 @@ describe('Comments (e2e)', () => {
       const { adminA } = await setup();
 
       await api()
-        .patch(`/comments/${unknownId}`)
+        .patch(`/api/comments/${unknownId}`)
         .set(bearer(adminA))
         .send({ body: 'x' })
         .expect(404);
       await api()
-        .delete(`/comments/${unknownId}`)
+        .delete(`/api/comments/${unknownId}`)
         .set(bearer(adminA))
         .expect(404);
     });
@@ -261,7 +276,10 @@ describe('Comments (e2e)', () => {
       await addComment(adminA, issueId, 'uno').expect(201);
       await addComment(adminA, issueId, 'dos').expect(201);
 
-      await api().delete(`/issues/${issueId}`).set(bearer(adminA)).expect(204);
+      await api()
+        .delete(`/api/issues/${issueId}`)
+        .set(bearer(adminA))
+        .expect(204);
 
       expect(await prisma.comment.count()).toBe(0);
     });
@@ -273,7 +291,7 @@ describe('Comments (e2e)', () => {
       await addComment(adminA, issueId, 'Privado').expect(201);
 
       await api()
-        .get(`/issues/${issueId}/comments`)
+        .get(`/api/issues/${issueId}/comments`)
         .set(bearer(adminB))
         .expect(404);
       await addComment(adminB, issueId, 'Intrusa').expect(404);
@@ -286,11 +304,11 @@ describe('Comments (e2e)', () => {
         .body;
 
       await api()
-        .patch(`/comments/${id}`)
+        .patch(`/api/comments/${id}`)
         .set(bearer(adminB))
         .send({ body: 'hack' })
         .expect(404);
-      await api().delete(`/comments/${id}`).set(bearer(adminB)).expect(404);
+      await api().delete(`/api/comments/${id}`).set(bearer(adminB)).expect(404);
 
       const intact = await prisma.comment.findUniqueOrThrow({ where: { id } });
       expect(intact.body).toBe('Privado');

@@ -17,7 +17,7 @@ describe('Auth (e2e)', () => {
   };
 
   const register = (body: object = validUser) =>
-    request(app.getHttpServer()).post('/auth/register').send(body);
+    request(app.getHttpServer()).post('/api/auth/register').send(body);
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -33,6 +33,8 @@ describe('Auth (e2e)', () => {
   });
 
   beforeEach(async () => {
+    await prisma.issue.deleteMany();
+    await prisma.project.deleteMany();
     await prisma.user.deleteMany();
     await prisma.tenant.deleteMany();
   });
@@ -102,7 +104,7 @@ describe('Auth (e2e)', () => {
 
     it('devuelve un token con credenciales válidas', async () => {
       const res = await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({ email: validUser.email, password: validUser.password })
         .expect(200);
 
@@ -111,21 +113,21 @@ describe('Auth (e2e)', () => {
 
     it('responde 401 con contraseña incorrecta', async () => {
       await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({ email: validUser.email, password: 'incorrecta' })
         .expect(401);
     });
 
     it('responde 401 si el usuario no existe', async () => {
       await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({ email: 'nadie@test.com', password: '12345678' })
         .expect(401);
     });
 
     it('responde 400 con un cuerpo inválido', async () => {
       await request(app.getHttpServer())
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({ email: 'no-es-un-correo' })
         .expect(400);
     });
@@ -133,12 +135,12 @@ describe('Auth (e2e)', () => {
 
   describe('GET /auth/me', () => {
     it('responde 401 sin token', async () => {
-      await request(app.getHttpServer()).get('/auth/me').expect(401);
+      await request(app.getHttpServer()).get('/api/auth/me').expect(401);
     });
 
     it('responde 401 con un token inválido', async () => {
       await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Authorization', 'Bearer token-falso')
         .expect(401);
     });
@@ -151,7 +153,7 @@ describe('Auth (e2e)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Authorization', `Bearer ${body.access_token}`)
         .expect(200);
 

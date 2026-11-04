@@ -13,14 +13,14 @@ describe('Refresh tokens (e2e)', () => {
 
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const me = (token: string) => api().get('/auth/me').set(bearer(token));
+  const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
   const refresh = (refreshToken: string, tenantId?: string) =>
-    api().post('/auth/refresh').send({ refreshToken, tenantId });
+    api().post('/api/auth/refresh').send({ refreshToken, tenantId });
 
   const registerUser = async (email: string) =>
     (
       await api()
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
         .expect(201)
     ).body as { access_token: string; refresh_token: string };
@@ -32,7 +32,7 @@ describe('Refresh tokens (e2e)', () => {
     });
     return (
       await api()
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({ email, password: '12345678' })
         .expect(200)
     ).body;
@@ -125,7 +125,7 @@ describe('Refresh tokens (e2e)', () => {
       const { refresh_token } = await registerUser('ana@test.com');
 
       await refresh('token-inventado').expect(401);
-      await api().post('/auth/refresh').send({}).expect(400);
+      await api().post('/api/auth/refresh').send({}).expect(400);
       await refresh(refresh_token, 'no-es-uuid').expect(400);
 
       await prisma.refreshToken.updateMany({
@@ -152,7 +152,7 @@ describe('Refresh tokens (e2e)', () => {
         .body;
       const second = (
         await api()
-          .post('/tenants')
+          .post('/api/tenants')
           .set(bearer(access_token))
           .send({ name: 'Segunda Org' })
           .expect(201)
@@ -188,20 +188,20 @@ describe('Refresh tokens (e2e)', () => {
       const { refresh_token } = await registerUser('ana@test.com');
 
       await api()
-        .post('/auth/logout')
+        .post('/api/auth/logout')
         .send({ refreshToken: refresh_token })
         .expect(204);
       await refresh(refresh_token).expect(401);
 
       await api()
-        .post('/auth/logout')
+        .post('/api/auth/logout')
         .send({ refreshToken: refresh_token })
         .expect(204);
       await api()
-        .post('/auth/logout')
+        .post('/api/auth/logout')
         .send({ refreshToken: 'desconocido' })
         .expect(204);
-      await api().post('/auth/logout').send({}).expect(400);
+      await api().post('/api/auth/logout').send({}).expect(400);
     });
 
     it('logout cierra solo esa sesión; logout-all cierra todas', async () => {
@@ -210,15 +210,15 @@ describe('Refresh tokens (e2e)', () => {
       const b = await login('ana@test.com');
 
       await api()
-        .post('/auth/logout')
+        .post('/api/auth/logout')
         .send({ refreshToken: a.refresh_token })
         .expect(204);
       await refresh(a.refresh_token).expect(401);
       const b2 = (await refresh(b.refresh_token).expect(200)).body; // la otra sesión sigue viva
 
-      await api().post('/auth/logout-all').expect(401);
+      await api().post('/api/auth/logout-all').expect(401);
       await api()
-        .post('/auth/logout-all')
+        .post('/api/auth/logout-all')
         .set(bearer(b2.access_token))
         .expect(204);
       await refresh(b2.refresh_token).expect(401);

@@ -12,11 +12,11 @@ describe('Tenants y membresías (e2e)', () => {
 
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const me = (token: string) => api().get('/auth/me').set(bearer(token));
+  const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
 
   const registerUser = async (email: string) => {
     const res = await api()
-      .post('/auth/register')
+      .post('/api/auth/register')
       .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
       .expect(201);
     return res.body.access_token as string;
@@ -33,6 +33,8 @@ describe('Tenants y membresías (e2e)', () => {
   });
 
   beforeEach(async () => {
+    await prisma.issue.deleteMany();
+    await prisma.project.deleteMany();
     await prisma.membership.deleteMany();
     await prisma.user.deleteMany();
     await prisma.tenant.deleteMany();
@@ -50,14 +52,14 @@ describe('Tenants y membresías (e2e)', () => {
     const { sub: anaId } = (await me(anaOwnToken).expect(200)).body;
 
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(adminToken))
       .send({ email: 'ana@test.com' })
       .expect(201);
 
     const anaToken = (
       await api()
-        .post('/auth/switch-tenant')
+        .post('/api/auth/switch-tenant')
         .set(bearer(anaOwnToken))
         .send({ tenantId })
         .expect(200)
@@ -77,7 +79,7 @@ describe('Tenants y membresías (e2e)', () => {
       data: { emailVerifiedAt: new Date() },
     });
     const login = await api()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email: 'ana@test.com', password: '12345678' })
       .expect(200);
     expect(login.body.organizations).toHaveLength(2);
@@ -87,12 +89,12 @@ describe('Tenants y membresías (e2e)', () => {
     const { adminToken } = await setup();
 
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(adminToken))
       .send({ email: 'nadie@test.com' })
       .expect(404);
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(adminToken))
       .send({ email: 'ana@test.com' })
       .expect(409);
@@ -102,12 +104,12 @@ describe('Tenants y membresías (e2e)', () => {
     const { anaToken, anaId } = await setup();
 
     await api()
-      .post('/tenants/current/members')
+      .post('/api/tenants/current/members')
       .set(bearer(anaToken))
       .send({ email: 'admin@test.com' })
       .expect(403);
     await api()
-      .delete(`/tenants/current/members/${anaId}`)
+      .delete(`/api/tenants/current/members/${anaId}`)
       .set(bearer(anaToken))
       .expect(403);
   });
@@ -117,7 +119,7 @@ describe('Tenants y membresías (e2e)', () => {
     await me(anaToken).expect(200);
 
     await api()
-      .delete(`/tenants/current/members/${anaId}`)
+      .delete(`/api/tenants/current/members/${anaId}`)
       .set(bearer(adminToken))
       .expect(204);
 
@@ -129,7 +131,7 @@ describe('Tenants y membresías (e2e)', () => {
     const { sub: adminId } = (await me(adminToken).expect(200)).body;
 
     await api()
-      .delete(`/tenants/current/members/${adminId}`)
+      .delete(`/api/tenants/current/members/${adminId}`)
       .set(bearer(adminToken))
       .expect(409);
   });
@@ -139,7 +141,7 @@ describe('Tenants y membresías (e2e)', () => {
     const { tenantId: firstTenant } = (await me(token).expect(200)).body;
 
     const res = await api()
-      .post('/tenants')
+      .post('/api/tenants')
       .set(bearer(token))
       .send({ name: 'Segunda Org' })
       .expect(201);
@@ -156,13 +158,13 @@ describe('Tenants y membresías (e2e)', () => {
   describe('PATCH /tenants/current/members/:userId (cambio de rol)', () => {
     const changeRole = (token: string, userId: string, role?: unknown) =>
       api()
-        .patch(`/tenants/current/members/${userId}`)
+        .patch(`/api/tenants/current/members/${userId}`)
         .set(bearer(token))
         .send(role === undefined ? {} : { role });
 
     const addMember = (token: string) =>
       api()
-        .post('/tenants/current/members')
+        .post('/api/tenants/current/members')
         .set(bearer(token))
         .send({ email: 'nadie@test.com' });
 
@@ -280,10 +282,10 @@ describe('Tenants y membresías (e2e)', () => {
 
       const results = await Promise.all([
         api()
-          .delete(`/tenants/current/members/${anaId}`)
+          .delete(`/api/tenants/current/members/${anaId}`)
           .set(bearer(adminToken)),
         api()
-          .delete(`/tenants/current/members/${adminId}`)
+          .delete(`/api/tenants/current/members/${adminId}`)
           .set(bearer(anaToken)),
       ]);
 
