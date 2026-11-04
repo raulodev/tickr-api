@@ -25,13 +25,18 @@ describe('Refresh tokens (e2e)', () => {
         .expect(201)
     ).body as { access_token: string; refresh_token: string };
 
-  const login = async (email: string) =>
-    (
+  const login = async (email: string) => {
+    await prisma.user.update({
+      where: { email },
+      data: { emailVerifiedAt: new Date() },
+    });
+    return (
       await api()
         .post('/auth/login')
         .send({ email, password: '12345678' })
         .expect(200)
     ).body;
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({

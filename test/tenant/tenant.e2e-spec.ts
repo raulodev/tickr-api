@@ -72,6 +72,10 @@ describe('Tenants y membresías (e2e)', () => {
     const res = await me(anaToken).expect(200);
     expect(res.body).toMatchObject({ tenantId, role: 'MEMBER' });
 
+    await prisma.user.update({
+      where: { email: 'ana@test.com' },
+      data: { emailVerifiedAt: new Date() },
+    });
     const login = await api()
       .post('/auth/login')
       .send({ email: 'ana@test.com', password: '12345678' })

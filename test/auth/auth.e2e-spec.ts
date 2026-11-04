@@ -94,6 +94,10 @@ describe('Auth (e2e)', () => {
   describe('POST /auth/login', () => {
     beforeEach(async () => {
       await register().expect(201);
+      await prisma.user.update({
+        where: { email: validUser.email },
+        data: { emailVerifiedAt: new Date() },
+      });
     });
 
     it('devuelve un token con credenciales válidas', async () => {
