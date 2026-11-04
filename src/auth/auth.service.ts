@@ -75,6 +75,8 @@ export class AuthService {
     const valid = user && (await bcrypt.compare(dto.password, user.password));
     if (!user || !valid)
       throw new UnauthorizedException(t('auth.INVALID_CREDENTIALS'));
+    if (!user.emailVerifiedAt)
+      throw new ForbiddenException(t('auth.EMAIL_NOT_VERIFIED'));
 
     const [membership] = user.memberships;
     if (!membership) throw new ForbiddenException(t('auth.NO_ORGANIZATION'));

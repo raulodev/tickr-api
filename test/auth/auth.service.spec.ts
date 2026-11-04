@@ -164,6 +164,7 @@ describe('AuthService', () => {
     const user = {
       id: 'user-1',
       password: 'hashed',
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
       memberships: [
         {
           tenantId: 'tenant-1',
@@ -187,6 +188,20 @@ describe('AuthService', () => {
           { id: 'tenant-1', name: 'Acme', slug: 'acme-1', role: 'ADMIN' },
         ],
       });
+    });
+
+    it('rechaza el inicio de sesión si el correo no está verificado', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...user,
+        emailVerifiedAt: null,
+      });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      await expect(service.login(dto)).rejects.toThrow(
+        'auth.EMAIL_NOT_VERIFIED',
+      );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(jwt.signAsync).not.toHaveBeenCalled();
     });
 
     it('limpia los tokens caducados del propio usuario', async () => {
