@@ -38,7 +38,7 @@ import { UpdateProjectDto } from './dto/update-project.dto.js';
 
 @ApiTags('projects')
 @ApiBearerAuth()
-@Controller('projects')
+@Controller('api/projects')
 @UseGuards(AuthGuard, RolesGuard)
 export class ProjectController {
   constructor(private projects: ProjectService) {}

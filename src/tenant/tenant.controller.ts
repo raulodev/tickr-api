@@ -37,7 +37,7 @@ import { TenantMemberResponseDto } from './dto/tenant-member-response.dto.js';
 
 @ApiTags('tenants')
 @ApiBearerAuth()
-@Controller('tenants')
+@Controller('api/tenants')
 @UseGuards(AuthGuard, RolesGuard)
 export class TenantController {
   constructor(private tenants: TenantService) {}

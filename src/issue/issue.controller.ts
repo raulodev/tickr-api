@@ -39,7 +39,7 @@ import { PaginationQueryDto } from '../common/pagination-query.dto.js';
 
 @ApiTags('issues')
 @ApiBearerAuth()
-@Controller('issues')
+@Controller('api/issues')
 @UseGuards(AuthGuard, RolesGuard)
 export class IssueController {
   constructor(private issues: IssueService) {}

@@ -34,7 +34,7 @@ import { CommentResponseDto } from './dto/comment-response.dto.js';
 
 @ApiTags('comments')
 @ApiBearerAuth()
-@Controller()
+@Controller('api/')
 @UseGuards(AuthGuard, RolesGuard)
 export class CommentController {
   constructor(private comments: CommentService) {}

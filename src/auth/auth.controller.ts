@@ -43,7 +43,7 @@ const REFRESH_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
 const MAIL_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 
 @ApiTags('auth')
-@Controller('auth')
+@Controller('api/auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
 

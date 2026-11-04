@@ -11,7 +11,7 @@ import { HealthService } from './health.service.js';
 
 @ApiTags('health')
 @SkipThrottle()
-@Controller('health')
+@Controller('api/health')
 export class HealthController {
   constructor(private health: HealthService) {}
 
