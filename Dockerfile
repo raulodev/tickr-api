@@ -17,7 +17,6 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 COPY . .
 RUN pnpm exec prisma generate --config prisma7.config.ts \
-    && pnpm exec prisma migrate deploy --config prisma7.config.ts \
     && pnpm build \
     && pnpm prune --prod
 
@@ -39,4 +38,5 @@ USER node
 
 EXPOSE 3000
 
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["node", "dist/main.js"]
