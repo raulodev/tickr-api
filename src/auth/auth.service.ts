@@ -282,12 +282,12 @@ export class AuthService {
 
   async resetPassword({ token, newPassword }: ResetPasswordDto) {
     const userId = await this.tokens.consume(token, TokenType.PASSWORD_RESET);
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const password = await bcrypt.hash(newPassword, 10);
     const now = new Date();
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
-        data: { passwordHash, passwordChangedAt: now },
+        data: { password, passwordChangedAt: now },
       }),
       // completar el reset demuestra que controla el correo
       this.prisma.user.updateMany({
