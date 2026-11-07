@@ -49,7 +49,7 @@ export class AuthController {
 
   @Throttle(AUTH_THROTTLE)
   @Post('register')
-  @ApiCreatedResponse({ type: AuthSessionResponseDto })
+  @ApiCreatedResponse({ type: MessageResponseDto })
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
   @ApiConflictResponse({ type: ApiErrorResponseDto })
   @ApiTooManyRequestsResponse({ type: ApiErrorResponseDto })

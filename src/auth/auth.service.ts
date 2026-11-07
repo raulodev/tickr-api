@@ -61,7 +61,7 @@ export class AuthService {
 
     this.sendVerification(user);
 
-    return this.startSession(user.id, user.memberships[0]);
+    return { message: t('auth.ACCOUNT_CREATED') };
   }
 
   async login(dto: LoginDto) {

@@ -70,7 +70,7 @@ describe('OpenAPI', () => {
     expect(
       responseSchema(document, '/api/auth/register', 'post', '201'),
     ).toEqual({
-      $ref: '#/components/schemas/AuthSessionResponseDto',
+      $ref: '#/components/schemas/MessageResponseDto',
     });
     expect(responseSchema(document, '/api/auth/login', 'post', '200')).toEqual({
       $ref: '#/components/schemas/AuthLoginResponseDto',

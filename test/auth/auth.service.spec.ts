@@ -95,7 +95,7 @@ describe('AuthService', () => {
       name: 'Admin',
     };
 
-    it('crea la organización y el admin, y abre una sesión', async () => {
+    it('crea la organización y el admin', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
       vi.mocked(bcrypt.hash).mockResolvedValue('hashed' as never);
       tx.tenant.create.mockResolvedValue({ id: 'tenant-1' });
@@ -115,14 +115,8 @@ describe('AuthService', () => {
           }),
         }),
       );
-      expect(jwt.signAsync).toHaveBeenCalledWith({
-        sub: 'user-1',
-        tenantId: 'tenant-1',
-        role: 'ADMIN',
-      });
       expect(result).toEqual({
-        access_token: 'access-token',
-        refresh_token: expect.any(String),
+        message: 'auth.ACCOUNT_CREATED',
       });
     });
 
@@ -135,19 +129,9 @@ describe('AuthService', () => {
         memberships: [{ tenantId: 'tenant-1', role: 'ADMIN' }],
       });
 
-      const { refresh_token } = await service.register(dto);
+      const { message } = await service.register(dto);
 
-      const { data } = prisma.refreshToken.create.mock.calls[0][0];
-      expect(data).toEqual({
-        userId: 'user-1',
-        familyId: expect.any(String),
-        tokenHash: hashToken(refresh_token),
-        expiresAt: expect.any(Date),
-      });
-      expect(data.tokenHash).not.toBe(refresh_token);
-      expect(data.expiresAt.getTime() - Date.now()).toBeGreaterThan(
-        29 * 86_400_000,
-      );
+      expect(message).toEqual('auth.ACCOUNT_CREATED');
     });
 
     it('lanza ConflictException si el correo ya existe', async () => {
