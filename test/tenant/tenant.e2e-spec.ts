@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { setupApp } from '../../src/setup-app.js';
+import { overrideAuthMail } from '../e2e-test-helpers.js';
 
 describe('Tenants y membresías (e2e)', () => {
   let app: INestApplication;
@@ -15,17 +16,27 @@ describe('Tenants y membresías (e2e)', () => {
   const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
 
   const registerUser = async (email: string) => {
-    const res = await api()
+    await api()
       .post('/api/auth/register')
       .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
       .expect(201);
-    return res.body.access_token as string;
+    await prisma.user.update({
+      where: { email },
+      data: { emailVerifiedAt: new Date() },
+    });
+    const login = await api()
+      .post('/api/auth/login')
+      .send({ email, password: '12345678' })
+      .expect(200);
+    return login.body.access_token as string;
   };
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleRef = await overrideAuthMail(
+      Test.createTestingModule({
+        imports: [AppModule],
+      }),
+    ).compile();
     app = moduleRef.createNestApplication();
     setupApp(app);
     await app.init();

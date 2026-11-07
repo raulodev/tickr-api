@@ -4,6 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
+import { overrideAuthMail } from '../e2e-test-helpers.js';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -20,9 +21,11 @@ describe('Auth (e2e)', () => {
     request(app.getHttpServer()).post('/api/auth/register').send(body);
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleRef = await overrideAuthMail(
+      Test.createTestingModule({
+        imports: [AppModule],
+      }),
+    ).compile();
 
     app = moduleRef.createNestApplication();
     // Debe coincidir con la configuración de main.ts
@@ -44,10 +47,10 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /auth/register', () => {
-    it('crea el tenant y un usuario admin y devuelve un token', async () => {
+    it('crea el tenant y un usuario admin', async () => {
       const res = await register().expect(201);
 
-      expect(res.body.access_token).toEqual(expect.any(String));
+      expect(res.body).toEqual({ message: expect.any(String) });
 
       const user = await prisma.user.findUnique({
         where: { email: validUser.email },
@@ -146,11 +149,23 @@ describe('Auth (e2e)', () => {
     });
 
     it('devuelve sub, tenantId y role del token', async () => {
-      const { body } = await register().expect(201);
+      await register().expect(201);
       const user = await prisma.user.findUniqueOrThrow({
         where: { email: validUser.email },
         include: { memberships: true },
       });
+
+      await prisma.user.update({
+        where: { email: validUser.email },
+        data: {
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      const { body } = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: validUser.email, password: validUser.password })
+        .expect(200);
 
       const res = await request(app.getHttpServer())
         .get('/api/auth/me')

@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
+import { overrideAuthMail } from '../e2e-test-helpers.js';
 
 describe('Projects (e2e)', () => {
   let app: INestApplication;
@@ -13,13 +14,21 @@ describe('Projects (e2e)', () => {
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-  const registerUser = async (email: string) =>
-    (
-      await api()
-        .post('/api/auth/register')
-        .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
-        .expect(201)
-    ).body.access_token as string;
+  const registerUser = async (email: string) => {
+    await api()
+      .post('/api/auth/register')
+      .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
+      .expect(201);
+    await prisma.user.update({
+      where: { email },
+      data: { emailVerifiedAt: new Date() },
+    });
+    const res = await api()
+      .post('/api/auth/login')
+      .send({ email, password: '12345678' })
+      .expect(200);
+    return res.body.access_token as string;
+  };
 
   const createProject = (token: string, name = 'Tickr', key = 'TKR') =>
     api().post('/api/projects').set(bearer(token)).send({ name, key });
@@ -50,9 +59,11 @@ describe('Projects (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleRef = await overrideAuthMail(
+      Test.createTestingModule({
+        imports: [AppModule],
+      }),
+    ).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
       new I18nValidationPipe({ whitelist: true, transform: true }),

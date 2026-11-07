@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { I18nValidationExceptionFilter, I18nValidationPipe } from 'nestjs-i18n';
+import { overrideAuthMail } from '../e2e-test-helpers.js';
 
 describe('Comments (e2e)', () => {
   let app: INestApplication;
@@ -15,13 +16,21 @@ describe('Comments (e2e)', () => {
   const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
   const unknownId = '00000000-0000-4000-8000-000000000000';
 
-  const registerUser = async (email: string) =>
-    (
-      await api()
-        .post('/api/auth/register')
-        .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
-        .expect(201)
-    ).body.access_token as string;
+  const registerUser = async (email: string) => {
+    await api()
+      .post('/api/auth/register')
+      .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
+      .expect(201);
+    await prisma.user.update({
+      where: { email },
+      data: { emailVerifiedAt: new Date() },
+    });
+    const res = await api()
+      .post('/api/auth/login')
+      .send({ email, password: '12345678' })
+      .expect(200);
+    return res.body.access_token as string;
+  };
 
   const addComment = (token: string, issueId: string, body: unknown) =>
     api()
@@ -72,9 +81,11 @@ describe('Comments (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleRef = await overrideAuthMail(
+      Test.createTestingModule({
+        imports: [AppModule],
+      }),
+    ).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
       new I18nValidationPipe({ whitelist: true, transform: true }),

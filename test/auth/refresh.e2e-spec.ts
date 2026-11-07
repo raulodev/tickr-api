@@ -6,6 +6,7 @@ import { AppModule } from '../../src/app.module.js';
 import { hashToken } from '../../src/auth/refresh-token.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { setupApp } from '../../src/setup-app.js';
+import { overrideAuthMail } from '../e2e-test-helpers.js';
 
 describe('Refresh tokens (e2e)', () => {
   let app: INestApplication;
@@ -17,13 +18,13 @@ describe('Refresh tokens (e2e)', () => {
   const refresh = (refreshToken: string, tenantId?: string) =>
     api().post('/api/auth/refresh').send({ refreshToken, tenantId });
 
-  const registerUser = async (email: string) =>
-    (
-      await api()
-        .post('/api/auth/register')
-        .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
-        .expect(201)
-    ).body as { access_token: string; refresh_token: string };
+  const registerUser = async (email: string) => {
+    await api()
+      .post('/api/auth/register')
+      .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
+      .expect(201);
+    return login(email);
+  };
 
   const login = async (email: string) => {
     await prisma.user.update({
@@ -39,9 +40,11 @@ describe('Refresh tokens (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+    const moduleRef = await overrideAuthMail(
+      Test.createTestingModule({
+        imports: [AppModule],
+      }),
+    ).compile();
     app = moduleRef.createNestApplication();
     setupApp(app);
     await app.init();
@@ -63,14 +66,20 @@ describe('Refresh tokens (e2e)', () => {
   });
 
   describe('emisión', () => {
-    it('register y login devuelven access token y refresh token', async () => {
-      const registered = await registerUser('ana@test.com');
-      expect(registered.access_token).toEqual(expect.any(String));
-      expect(registered.refresh_token).toEqual(expect.any(String));
+    it('registro devuelve un mensaje y login devuelve los tokens', async () => {
+      const registered = await api()
+        .post('/api/auth/register')
+        .send({
+          tenantName: 'Org de ana@test.com',
+          email: 'ana@test.com',
+          password: '12345678',
+        })
+        .expect(201);
+      expect(registered.body).toEqual({ message: expect.any(String) });
 
       const logged = await login('ana@test.com');
       expect(logged.refresh_token).toEqual(expect.any(String));
-      expect(logged.refresh_token).not.toBe(registered.refresh_token);
+      expect(logged.access_token).toEqual(expect.any(String));
       expect(logged.organizations).toHaveLength(1);
     });
 

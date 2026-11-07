@@ -43,12 +43,12 @@ describe('AuthController', () => {
       email: 'admin@test.com',
       password: '12345678',
     };
-    authService.register.mockResolvedValue({ access_token: 'token' });
+    authService.register.mockResolvedValue({ message: 'Cuenta creada' });
 
     const result = await controller.register(dto);
 
     expect(authService.register).toHaveBeenCalledWith(dto);
-    expect(result).toEqual({ access_token: 'token' });
+    expect(result).toEqual({ message: 'Cuenta creada' });
   });
 
   it('login delega en el servicio y devuelve su resultado', async () => {
