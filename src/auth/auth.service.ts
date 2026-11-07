@@ -267,8 +267,9 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
+    const message = { message: t('auth.RESET_EMAIL_SENT') };
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return;
+    if (!user) return message;
     const locale = this.currentLocale();
     const token = await this.tokens.issue(
       user.id,
@@ -276,8 +277,7 @@ export class AuthService {
       HOUR_MS,
     );
     this.authMail.sendPasswordReset(user, token, locale);
-
-    return { message: t('auth.RESET_EMAIL_SENT') };
+    return message;
   }
 
   async resetPassword({ token, newPassword }: ResetPasswordDto) {
