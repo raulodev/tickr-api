@@ -17,6 +17,7 @@ describe('AuthController', () => {
     refresh: vi.fn(),
     logout: vi.fn(),
     logoutAll: vi.fn(),
+    deleteAccount: vi.fn(),
     verifyEmail: vi.fn(),
     resendVerification: vi.fn(),
     forgotPassword: vi.fn(),
@@ -97,6 +98,16 @@ describe('AuthController', () => {
     expect(authService.logoutAll).toHaveBeenCalledWith('user-1');
   });
 
+  it('deleteAccount pasa el id del usuario autenticado', async () => {
+    await controller.deleteAccount({
+      sub: 'user-1',
+      tenantId: 'tenant-1',
+      role: 'ADMIN',
+    });
+
+    expect(authService.deleteAccount).toHaveBeenCalledWith('user-1');
+  });
+
   it('verifyEmail pasa el token y devuelve el resultado del servicio', async () => {
     authService.verifyEmail.mockResolvedValue({ message: 'Email verificado' });
 
@@ -147,5 +158,6 @@ describe('AuthController', () => {
     expect(code('refresh')).toBe(200);
     expect(code('logout')).toBe(204);
     expect(code('logoutAll')).toBe(204);
+    expect(code('deleteAccount')).toBe(204);
   });
 });

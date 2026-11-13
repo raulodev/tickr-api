@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Post,
@@ -76,6 +77,17 @@ export class AuthController {
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
   me(@Req() req: any) {
     return req.user;
+  }
+
+  @UseGuards(AuthGuard)
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @ApiNoContentResponse()
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+  deleteAccount(@CurrentUser() user: AuthUser) {
+    return this.auth.deleteAccount(user.sub);
   }
 
   @UseGuards(AuthGuard)

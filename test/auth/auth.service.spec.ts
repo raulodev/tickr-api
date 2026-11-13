@@ -25,8 +25,21 @@ describe('AuthService', () => {
 
   const tx = {
     tenant: { create: vi.fn() },
-    user: { create: vi.fn() },
-    refreshToken: { updateMany: vi.fn(), create: vi.fn() },
+    user: { create: vi.fn(), update: vi.fn() },
+    refreshToken: {
+      updateMany: vi.fn(),
+      create: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    authToken: { deleteMany: vi.fn() },
+    membership: {
+      findMany: vi.fn(),
+      count: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    issue: { findMany: vi.fn(), updateMany: vi.fn() },
+    issueEvent: { createMany: vi.fn() },
+    $queryRaw: vi.fn(),
   };
   const prisma = {
     user: { findUnique: vi.fn() },
@@ -70,6 +83,16 @@ describe('AuthService', () => {
     prisma.refreshToken.deleteMany.mockResolvedValue({ count: 0 });
     tx.refreshToken.create.mockResolvedValue({});
     tx.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+    tx.membership.findMany.mockResolvedValue([
+      { tenantId: 'tenant-1', role: 'MEMBER' },
+    ]);
+    tx.membership.count.mockResolvedValue(1);
+    tx.issue.findMany.mockResolvedValue([]);
+    tx.issueEvent.createMany.mockResolvedValue({ count: 0 });
+    tx.issue.updateMany.mockResolvedValue({ count: 0 });
+    tx.membership.deleteMany.mockResolvedValue({ count: 1 });
+    tx.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
+    tx.authToken.deleteMany.mockResolvedValue({ count: 0 });
 
     const module = await Test.createTestingModule({
       providers: [
@@ -386,6 +409,68 @@ describe('AuthService', () => {
         where: { userId: 'user-1', revokedAt: null },
         data: { revokedAt: expect.any(Date) },
       });
+    });
+  });
+
+  describe('deleteAccount', () => {
+    it('anonimiza la identidad, elimina sesiones y membresías, y conserva la autoría', async () => {
+      tx.issue.findMany.mockResolvedValue([
+        { id: 'issue-1', tenantId: 'tenant-1' },
+      ]);
+      vi.mocked(bcrypt.hash).mockResolvedValue('randomized-password' as never);
+
+      await service.deleteAccount('user-1');
+
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          email: expect.stringMatching(
+            /^deleted-[0-9a-f-]+@anonymized\.invalid$/,
+          ),
+          name: null,
+          password: 'randomized-password',
+          emailVerifiedAt: null,
+          passwordChangedAt: expect.any(Date),
+        },
+      });
+      expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+      expect(tx.authToken.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+      expect(tx.membership.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+      expect(tx.issueEvent.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            tenantId: 'tenant-1',
+            issueId: 'issue-1',
+            actorId: 'user-1',
+            type: 'ASSIGNEE_CHANGED',
+            oldValue: 'user-1',
+            newValue: null,
+          },
+        ],
+      });
+      expect(tx.issue.updateMany).toHaveBeenCalledWith({
+        where: { assigneeId: 'user-1' },
+        data: { assigneeId: null },
+      });
+    });
+
+    it('rechaza la baja si la persona es la única administradora', async () => {
+      tx.membership.findMany
+        .mockResolvedValueOnce([{ tenantId: 'tenant-1' }])
+        .mockResolvedValueOnce([{ tenantId: 'tenant-1', role: 'ADMIN' }]);
+      tx.membership.count.mockResolvedValue(1);
+
+      await expect(service.deleteAccount('user-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(tx.user.update).not.toHaveBeenCalled();
+      expect(tx.membership.deleteMany).not.toHaveBeenCalled();
     });
   });
 

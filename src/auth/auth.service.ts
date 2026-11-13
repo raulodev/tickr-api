@@ -181,6 +181,74 @@ export class AuthService {
     });
   }
 
+  async deleteAccount(userId: string) {
+    const password = await bcrypt.hash(randomUUID(), 10);
+    const email = `deleted-${randomUUID()}@anonymized.invalid`;
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      const currentMemberships = await tx.membership.findMany({
+        where: { userId },
+        select: { tenantId: true },
+      });
+      const tenantIds = [
+        ...new Set(currentMemberships.map(({ tenantId }) => tenantId)),
+      ].sort();
+
+      for (const tenantId of tenantIds) {
+        await tx.$queryRaw`SELECT id FROM "Tenant" WHERE id = ${tenantId} FOR UPDATE`;
+      }
+
+      const memberships = await tx.membership.findMany({
+        where: { userId },
+        select: { tenantId: true, role: true },
+      });
+      for (const membership of memberships) {
+        if (membership.role !== Role.ADMIN) continue;
+
+        const adminCount = await tx.membership.count({
+          where: { tenantId: membership.tenantId, role: Role.ADMIN },
+        });
+        if (adminCount <= 1)
+          throw new ConflictException(t('tenant.LAST_ADMIN'));
+      }
+
+      const assignedIssues = await tx.issue.findMany({
+        where: { assigneeId: userId },
+        select: { id: true, tenantId: true },
+      });
+      if (assignedIssues.length > 0) {
+        await tx.issueEvent.createMany({
+          data: assignedIssues.map(({ id, tenantId }) => ({
+            tenantId,
+            issueId: id,
+            actorId: userId,
+            type: 'ASSIGNEE_CHANGED' as const,
+            oldValue: userId,
+            newValue: null,
+          })),
+        });
+      }
+      await tx.issue.updateMany({
+        where: { assigneeId: userId },
+        data: { assigneeId: null },
+      });
+      await tx.membership.deleteMany({ where: { userId } });
+      await tx.refreshToken.deleteMany({ where: { userId } });
+      await tx.authToken.deleteMany({ where: { userId } });
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          email,
+          name: null,
+          password,
+          emailVerifiedAt: null,
+          passwordChangedAt: now,
+        },
+      });
+    });
+  }
+
   private async startSession(
     userId: string,
     membership: { tenantId: string; role: Role },
