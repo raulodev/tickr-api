@@ -8,7 +8,7 @@ export class LoginDto {
   @IsEmail({}, { message: i18nValidationMessage('validation.EMAIL_INVALID') })
   email: string;
 
-  @ApiProperty()
+  @ApiProperty({ enum: AuthProvider })
   @IsEnum(AuthProvider, {
     message: i18nValidationMessage('validation.AUTH_PROVIDER_INVALID'),
   })
@@ -18,12 +18,12 @@ export class LoginDto {
   @IsString()
   oAuthToken: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String, nullable: true, required: false })
   @IsString()
   @IsOptional()
   oAuthTokenSecret?: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: String, nullable: true, required: false })
   @IsOptional()
   @IsString()
   name?: string;
