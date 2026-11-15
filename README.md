@@ -3,7 +3,8 @@
 Tickr is a NestJS REST API for managing users, multi-tenant organizations, and
 project issues. It provides JWT authentication, organization membership and
 role-based access, projects, sequentially numbered issues, and issue comments.
-PostgreSQL is accessed through Prisma.
+It supports GitHub OAuth, refreshable sessions, issue history, and health
+checks. PostgreSQL is accessed through Prisma.
 
 ## Requirements
 
@@ -49,38 +50,46 @@ variable to use a different port. Interactive API documentation is available at
 
 ## Features
 
-- Registration and sign-in; registration creates an organization and assigns
-  its creator the administrator role. Users must verify their email address
-  before they can sign in.
-- Email verification, verification email resend, and password recovery.
-- JWT authentication and switching between organizations the user belongs to.
+- Sign-in with a verified GitHub email; the first successful sign-in creates
+  the user and a default organization.
+- JWT access tokens, rotating refresh tokens, session revocation, and switching
+  between organizations the user belongs to.
 - Organization creation and member management with role-based permissions.
 - Project management with tenant-scoped project keys.
 - Issue tracking with per-project sequential numbers, status, priority, and
   optional assignees.
+- Paginated issue history for creation, status, priority, and assignee changes.
 - Comments on issues, with editing restricted to their authors and deletion
   available to authors or organization administrators.
-- Tenant isolation across projects, issues, and comments.
+- Account deletion that anonymizes the account and removes its memberships and
+  sessions.
+- Tenant isolation across projects, issues, and comments, with liveness and
+  readiness health checks.
 - Validation messages in English or Spanish, selected using the `?lang=`
   parameter or the `Accept-Language` header.
 
 ## API overview
 
 Interactive API documentation is available at [`/api`](http://localhost:3000/api)
-when the server is running.
+when the server is running. The main routes are:
 
 | Route | Description |
 | --- | --- |
-| `/auth` | Register, verify email, sign in, recover a password, get the current user, and switch organizations. |
-| `/tenants` | Create organizations and manage current-organization members. |
-| `/projects` | Create, list, update, and delete projects. |
-| `/issues` | Create, list, update, and delete issues. |
-| `/issues/:issueId/comments` | List and create comments on an issue. |
-| `/comments/:id` | Update or delete a comment. |
+| `POST /api/auth/login` | Verify a GitHub OAuth token and start a session. |
+| `POST /api/auth/refresh`, `POST /api/auth/logout`, `POST /api/auth/logout-all` | Refresh or revoke sessions. |
+| `GET /api/auth/me`, `POST /api/auth/switch-tenant`, `DELETE /api/auth/me` | Get the current user, switch organizations, or delete the account. |
+| `POST /api/tenants`, `/api/tenants/current/members` | Create organizations and manage current-organization members. |
+| `/api/projects` | List, create, update, and delete projects. |
+| `/api/issues` | List, create, update, and delete issues; `GET /api/issues/:id/history` returns paginated history. |
+| `/api/issues/:issueId/comments` | List and create comments on an issue. |
+| `/api/comments/:id` | Update or delete a comment. |
+| `GET /api/health/live`, `GET /api/health/ready` | Check process liveness and database readiness. |
 
 Protected routes require a bearer access token. Project creation, updates, and
-deletion are restricted to organization administrators. Organization members
-can create and update issues; issue deletion is restricted to administrators.
+deletion and organization member management are restricted to organization
+administrators. Organization members can create and update issues; issue
+deletion is restricted to administrators. Readiness returns an error when the
+database is unavailable.
 
 ## Commands
 
@@ -117,11 +126,12 @@ the container.
 
 ## Project structure
 
-- `src/auth/`: registration, sign-in, JWT, and role-based authorization.
+- `src/auth/`: GitHub sign-in, session tokens, and role-based authorization.
 - `src/tenant/`: organizations and member management.
 - `src/project/`: project endpoints and services.
 - `src/issue/`: issue endpoints, validation, and issue numbering.
 - `src/comment/`: issue comment endpoints and services.
+- `src/health/`: liveness and readiness endpoints.
 - `src/prisma/`: Prisma and PostgreSQL integration.
 - `src/i18n/`: English and Spanish translations.
 - `prisma/`: database schema and migrations.
