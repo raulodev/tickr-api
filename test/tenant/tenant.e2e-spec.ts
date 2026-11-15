@@ -1,11 +1,30 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { setupApp } from '../../src/setup-app.js';
-import { overrideAuthMail } from '../e2e-test-helpers.js';
+
+const { getProvider, isCredentialsValid } = vi.hoisted(() => {
+  const isCredentialsValid = vi.fn();
+  return {
+    isCredentialsValid,
+    getProvider: vi.fn(() => ({ isCredentialsValid })),
+  };
+});
+
+vi.mock('../../src/auth/providers/auth-provider.factory.js', () => ({
+  AuthProviderFactory: { getProvider },
+}));
 
 describe('Tenants y membresías (e2e)', () => {
   let app: INestApplication;
@@ -15,28 +34,23 @@ describe('Tenants y membresías (e2e)', () => {
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
   const me = (token: string) => api().get('/api/auth/me').set(bearer(token));
 
-  const registerUser = async (email: string) => {
-    await api()
-      .post('/api/auth/register')
-      .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
-      .expect(201);
-    await prisma.user.update({
-      where: { email },
-      data: { emailVerifiedAt: new Date() },
-    });
+  const loginUser = async (email: string) => {
     const login = await api()
       .post('/api/auth/login')
-      .send({ email, password: '12345678' })
+      .send({
+        email,
+        provider: 'GITHUB',
+        oAuthToken: 'mock-oauth-token',
+        name: 'Test User',
+      })
       .expect(200);
     return login.body.access_token as string;
   };
 
   beforeAll(async () => {
-    const moduleRef = await overrideAuthMail(
-      Test.createTestingModule({
-        imports: [AppModule],
-      }),
-    ).compile();
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = moduleRef.createNestApplication();
     setupApp(app);
     await app.init();
@@ -44,6 +58,9 @@ describe('Tenants y membresías (e2e)', () => {
   });
 
   beforeEach(async () => {
+    vi.resetAllMocks();
+    getProvider.mockReturnValue({ isCredentialsValid });
+    isCredentialsValid.mockResolvedValue(true);
     await prisma.issue.deleteMany();
     await prisma.project.deleteMany();
     await prisma.membership.deleteMany();
@@ -57,8 +74,8 @@ describe('Tenants y membresías (e2e)', () => {
 
   /** Admin con organización + usuario Ana ya añadida como MEMBER y con token de esa organización */
   const setup = async () => {
-    const adminToken = await registerUser('admin@test.com');
-    const anaOwnToken = await registerUser('ana@test.com');
+    const adminToken = await loginUser('admin@test.com');
+    const anaOwnToken = await loginUser('ana@test.com');
     const { tenantId } = (await me(adminToken).expect(200)).body;
     const { sub: anaId } = (await me(anaOwnToken).expect(200)).body;
 
@@ -79,19 +96,20 @@ describe('Tenants y membresías (e2e)', () => {
     return { adminToken, anaToken, anaOwnToken, anaId, tenantId };
   };
 
-  it('un admin añade a un usuario registrado y este puede cambiar a la organización', async () => {
+  it('un admin añade a un usuario existente y este puede cambiar a la organización', async () => {
     const { anaToken, tenantId } = await setup();
 
     const res = await me(anaToken).expect(200);
     expect(res.body).toMatchObject({ tenantId, role: 'MEMBER' });
 
-    await prisma.user.update({
-      where: { email: 'ana@test.com' },
-      data: { emailVerifiedAt: new Date() },
-    });
     const login = await api()
       .post('/api/auth/login')
-      .send({ email: 'ana@test.com', password: '12345678' })
+      .send({
+        email: 'ana@test.com',
+        provider: 'GITHUB',
+        oAuthToken: 'mock-oauth-token',
+        name: 'Ana',
+      })
       .expect(200);
     expect(login.body.organizations).toHaveLength(2);
   });
@@ -148,7 +166,7 @@ describe('Tenants y membresías (e2e)', () => {
   });
 
   it('un usuario existente crea otra organización y recibe un token de ella', async () => {
-    const token = await registerUser('ana@test.com');
+    const token = await loginUser('ana@test.com');
     const { tenantId: firstTenant } = (await me(token).expect(200)).body;
 
     const res = await api()
@@ -240,7 +258,7 @@ describe('Tenants y membresías (e2e)', () => {
 
     it('responde 404 si el usuario no es miembro de la organización', async () => {
       const { adminToken } = await setup();
-      const stranger = await registerUser('otro@test.com'); // existe, pero en otra organización
+      const stranger = await loginUser('otro@test.com'); // existe, pero en otra organización
       const { sub: strangerId } = (await me(stranger).expect(200)).body;
 
       await changeRole(adminToken, strangerId, 'ADMIN').expect(404);
@@ -261,7 +279,7 @@ describe('Tenants y membresías (e2e)', () => {
 
     it('otra organización no puede cambiar los roles de esta', async () => {
       const { anaId } = await setup();
-      const adminB = await registerUser('admin-b@test.com');
+      const adminB = await loginUser('admin-b@test.com');
 
       await changeRole(adminB, anaId, 'ADMIN').expect(404);
     });

@@ -38,30 +38,6 @@ describe('AuthController', () => {
     controller = module.get(AuthController);
   });
 
-  it('register delega en el servicio y devuelve su resultado', async () => {
-    const dto = {
-      tenantName: 'Mi Empresa',
-      email: 'admin@test.com',
-      password: '12345678',
-    };
-    authService.register.mockResolvedValue({ message: 'Cuenta creada' });
-
-    const result = await controller.register(dto);
-
-    expect(authService.register).toHaveBeenCalledWith(dto);
-    expect(result).toEqual({ message: 'Cuenta creada' });
-  });
-
-  it('login delega en el servicio y devuelve su resultado', async () => {
-    const dto = { email: 'admin@test.com', password: '12345678' };
-    authService.login.mockResolvedValue({ access_token: 'token' });
-
-    const result = await controller.login(dto);
-
-    expect(authService.login).toHaveBeenCalledWith(dto);
-    expect(result).toEqual({ access_token: 'token' });
-  });
-
   it('me devuelve el usuario del token', () => {
     const user = { sub: 'user-1', tenantId: 'tenant-1', role: 'ADMIN' };
 
@@ -106,49 +82,6 @@ describe('AuthController', () => {
     });
 
     expect(authService.deleteAccount).toHaveBeenCalledWith('user-1');
-  });
-
-  it('verifyEmail pasa el token y devuelve el resultado del servicio', async () => {
-    authService.verifyEmail.mockResolvedValue({ message: 'Email verificado' });
-
-    await expect(
-      controller.verifyEmail({ token: 'verify-token' }),
-    ).resolves.toEqual({ message: 'Email verificado' });
-    expect(authService.verifyEmail).toHaveBeenCalledWith('verify-token');
-  });
-
-  it('resendVerification pasa el correo y devuelve el resultado del servicio', async () => {
-    authService.resendVerification.mockResolvedValue({
-      message: 'Correo enviado',
-    });
-
-    await expect(
-      controller.resendVerification({ email: 'user@test.com' }),
-    ).resolves.toEqual({ message: 'Correo enviado' });
-    expect(authService.resendVerification).toHaveBeenCalledWith(
-      'user@test.com',
-    );
-  });
-
-  it('forgotPassword pasa el correo y devuelve el resultado del servicio', async () => {
-    authService.forgotPassword.mockResolvedValue({ message: 'Correo enviado' });
-
-    await expect(
-      controller.forgotPassword({ email: 'user@test.com' }),
-    ).resolves.toEqual({ message: 'Correo enviado' });
-    expect(authService.forgotPassword).toHaveBeenCalledWith('user@test.com');
-  });
-
-  it('resetPassword pasa el DTO completo y devuelve el resultado del servicio', async () => {
-    const dto = { token: 'reset-token', newPassword: 'new-password' };
-    authService.resetPassword.mockResolvedValue({
-      message: 'Clave actualizada',
-    });
-
-    await expect(controller.resetPassword(dto)).resolves.toEqual({
-      message: 'Clave actualizada',
-    });
-    expect(authService.resetPassword).toHaveBeenCalledWith(dto);
   });
 
   it('refresh responde 200 y logout y logout-all responden 204', () => {

@@ -55,23 +55,7 @@ describe('OpenAPI', () => {
     await app?.close();
   });
 
-  it('documenta los campos requeridos para iniciar sesión', () => {
-    expect(document.components?.schemas?.LoginDto).toMatchObject({
-      type: 'object',
-      required: ['email', 'password'],
-      properties: {
-        email: { type: 'string' },
-        password: { type: 'string' },
-      },
-    });
-  });
-
   it('documenta las respuestas DTO de auth y health con sus códigos HTTP', () => {
-    expect(
-      responseSchema(document, '/api/auth/register', 'post', '201'),
-    ).toEqual({
-      $ref: '#/components/schemas/MessageResponseDto',
-    });
     expect(responseSchema(document, '/api/auth/login', 'post', '200')).toEqual({
       $ref: '#/components/schemas/AuthLoginResponseDto',
     });
@@ -112,7 +96,6 @@ describe('OpenAPI', () => {
 
   it('documenta una respuesta exitosa para cada endpoint', () => {
     const endpoints = [
-      ['/api/auth/register', 'post', '201'],
       ['/api/auth/login', 'post', '200'],
       ['/api/auth/me', 'get', '200'],
       ['/api/auth/switch-tenant', 'post', '200'],

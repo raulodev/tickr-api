@@ -25,5 +25,6 @@
   "COMMENT_BODY_MAX_LENGTH": "El comentario no puede superar los {constraints.0} caracteres",
   "SEARCH_INVALID": "El texto de búsqueda debe ser texto",
   "SEARCH_MAX_LENGTH": "El texto de búsqueda no puede superar los {constraints.0} caracteres",
-  "REFRESH_TOKEN_REQUIRED": "El token de renovación es obligatorio"
+  "REFRESH_TOKEN_REQUIRED": "El token de renovación es obligatorio",
+  "AUTH_PROVIDER_INVALID": "El proveedor de autenticación no es válido"
 }

@@ -2,10 +2,29 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { I18nValidationExceptionFilter, I18nValidationPipe } from 'nestjs-i18n';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
-import { overrideAuthMail } from '../e2e-test-helpers.js';
+
+const { getProvider, isCredentialsValid } = vi.hoisted(() => {
+  const isCredentialsValid = vi.fn();
+  return {
+    isCredentialsValid,
+    getProvider: vi.fn(() => ({ isCredentialsValid })),
+  };
+});
+
+vi.mock('../../src/auth/providers/auth-provider.factory.js', () => ({
+  AuthProviderFactory: { getProvider },
+}));
 
 describe('Projects (e2e)', () => {
   let app: INestApplication;
@@ -14,18 +33,15 @@ describe('Projects (e2e)', () => {
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-  const registerUser = async (email: string) => {
-    await api()
-      .post('/api/auth/register')
-      .send({ tenantName: `Org de ${email}`, email, password: '12345678' })
-      .expect(201);
-    await prisma.user.update({
-      where: { email },
-      data: { emailVerifiedAt: new Date() },
-    });
+  const loginUser = async (email: string) => {
     const res = await api()
       .post('/api/auth/login')
-      .send({ email, password: '12345678' })
+      .send({
+        email,
+        provider: 'GITHUB',
+        oAuthToken: 'mock-oauth-token',
+        name: 'Test User',
+      })
       .expect(200);
     return res.body.access_token as string;
   };
@@ -35,9 +51,9 @@ describe('Projects (e2e)', () => {
 
   /** Dos organizaciones, y un miembro sin rol admin en la A */
   const setup = async () => {
-    const adminA = await registerUser('admin-a@test.com');
-    const adminB = await registerUser('admin-b@test.com');
-    const anaOwn = await registerUser('ana@test.com');
+    const adminA = await loginUser('admin-a@test.com');
+    const adminB = await loginUser('admin-b@test.com');
+    const anaOwn = await loginUser('ana@test.com');
 
     const { tenantId } = (
       await api().get('/api/auth/me').set(bearer(adminA)).expect(200)
@@ -59,11 +75,9 @@ describe('Projects (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleRef = await overrideAuthMail(
-      Test.createTestingModule({
-        imports: [AppModule],
-      }),
-    ).compile();
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
       new I18nValidationPipe({ whitelist: true, transform: true }),
@@ -74,6 +88,9 @@ describe('Projects (e2e)', () => {
   });
 
   beforeEach(async () => {
+    vi.resetAllMocks();
+    getProvider.mockReturnValue({ isCredentialsValid });
+    isCredentialsValid.mockResolvedValue(true);
     await prisma.project.deleteMany();
     await prisma.membership.deleteMany();
     await prisma.user.deleteMany();

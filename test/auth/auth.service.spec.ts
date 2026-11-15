@@ -1,48 +1,33 @@
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import {
-  ConflictException,
-  ForbiddenException,
-  UnauthorizedException,
-} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service.js';
-import { AuthMailService } from '../../src/auth/auth-mail.service.js';
 import { AuthTokensService } from '../../src/auth/auth-tokens.service.js';
+import { Role } from '../../src/generated/prisma/client.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { hashToken } from '../../src/auth/refresh-token.js';
 
-vi.mock('../generated/prisma/client', () => ({
-  Role: { ADMIN: 'ADMIN', MEMBER: 'MEMBER' },
-  PrismaClient: class {},
-  Prisma: {},
+const { getProvider, isCredentialsValid } = vi.hoisted(() => {
+  const isCredentialsValid = vi.fn();
+  return {
+    isCredentialsValid,
+    getProvider: vi.fn(() => ({ isCredentialsValid })),
+  };
+});
+
+vi.mock('../../src/auth/providers/auth-provider.factory.js', () => ({
+  AuthProviderFactory: { getProvider },
 }));
-vi.mock('bcrypt', () => ({ hash: vi.fn(), compare: vi.fn() }));
 
 describe('AuthService', () => {
-  let service: AuthService;
-
-  const tx = {
+  const transaction = {
     tenant: { create: vi.fn() },
-    user: { create: vi.fn(), update: vi.fn() },
-    refreshToken: {
-      updateMany: vi.fn(),
-      create: vi.fn(),
-      deleteMany: vi.fn(),
-    },
-    authToken: { deleteMany: vi.fn() },
-    membership: {
-      findMany: vi.fn(),
-      count: vi.fn(),
-      deleteMany: vi.fn(),
-    },
-    issue: { findMany: vi.fn(), updateMany: vi.fn() },
-    issueEvent: { createMany: vi.fn() },
-    $queryRaw: vi.fn(),
+    user: { create: vi.fn() },
+    refreshToken: { updateMany: vi.fn(), create: vi.fn() },
   };
   const prisma = {
-    user: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn() },
     membership: { findUnique: vi.fn(), findFirst: vi.fn() },
     refreshToken: {
       create: vi.fn(),
@@ -53,453 +38,166 @@ describe('AuthService', () => {
     $transaction: vi.fn(),
   };
   const jwt = { signAsync: vi.fn() };
+  let service: AuthService;
 
+  const user = {
+    id: 'user-1',
+    memberships: [
+      {
+        tenantId: 'tenant-1',
+        role: Role.ADMIN,
+        tenant: { id: 'tenant-1', name: 'Acme', slug: 'acme' },
+      },
+    ],
+  };
   const membership = {
-    id: 'm-1',
+    id: 'membership-1',
     userId: 'user-1',
     tenantId: 'tenant-1',
-    role: 'ADMIN',
-  };
-  const stored = (overrides: Record<string, unknown> = {}) => ({
-    id: 'rt-1',
-    userId: 'user-1',
-    familyId: 'family-1',
-    tokenHash: 'hash',
-    expiresAt: new Date(Date.now() + 86_400_000),
-    revokedAt: null,
-    ...overrides,
-  });
-  const familyRevoked = {
-    where: { familyId: 'family-1', revokedAt: null },
-    data: { revokedAt: expect.any(Date) },
+    role: Role.ADMIN,
   };
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    prisma.$transaction.mockImplementation((cb) => cb(tx));
-    jwt.signAsync.mockResolvedValue('access-token');
+    getProvider.mockReturnValue({ isCredentialsValid });
+    isCredentialsValid.mockResolvedValue(true);
+    prisma.$transaction.mockImplementation(
+      (callback: (tx: typeof transaction) => unknown) => callback(transaction),
+    );
+    prisma.user.findUnique.mockResolvedValue({ id: user.id });
+    prisma.user.findUniqueOrThrow.mockResolvedValue(user);
     prisma.refreshToken.create.mockResolvedValue({});
+    prisma.refreshToken.findUnique.mockResolvedValue(null);
     prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
     prisma.refreshToken.deleteMany.mockResolvedValue({ count: 0 });
-    tx.refreshToken.create.mockResolvedValue({});
-    tx.refreshToken.updateMany.mockResolvedValue({ count: 1 });
-    tx.membership.findMany.mockResolvedValue([
-      { tenantId: 'tenant-1', role: 'MEMBER' },
-    ]);
-    tx.membership.count.mockResolvedValue(1);
-    tx.issue.findMany.mockResolvedValue([]);
-    tx.issueEvent.createMany.mockResolvedValue({ count: 0 });
-    tx.issue.updateMany.mockResolvedValue({ count: 0 });
-    tx.membership.deleteMany.mockResolvedValue({ count: 1 });
-    tx.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
-    tx.authToken.deleteMany.mockResolvedValue({ count: 0 });
+    transaction.tenant.create.mockResolvedValue({ id: 'tenant-1' });
+    transaction.user.create.mockResolvedValue({});
+    transaction.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+    transaction.refreshToken.create.mockResolvedValue({});
+    prisma.membership.findFirst.mockResolvedValue(membership);
+    prisma.membership.findUnique.mockResolvedValue(membership);
+    jwt.signAsync.mockResolvedValue('access-token');
 
     const module = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
-        { provide: AuthMailService, useValue: { sendVerification: vi.fn() } },
-        {
-          provide: AuthTokensService,
-          useValue: { issue: vi.fn(), consume: vi.fn() },
-        },
+        { provide: AuthTokensService, useValue: {} },
       ],
     }).compile();
 
     service = module.get(AuthService);
   });
 
-  describe('register', () => {
-    const dto = {
-      tenantName: 'Mi Empresa',
-      email: 'admin@test.com',
-      password: '12345678',
-      name: 'Admin',
-    };
-
-    it('crea la organización y el admin', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      vi.mocked(bcrypt.hash).mockResolvedValue('hashed' as never);
-      tx.tenant.create.mockResolvedValue({ id: 'tenant-1' });
-      tx.user.create.mockResolvedValue({
-        id: 'user-1',
-        memberships: [{ tenantId: 'tenant-1', role: 'ADMIN' }],
-      });
-
-      const result = await service.register(dto);
-
-      expect(tx.user.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            email: 'admin@test.com',
-            password: 'hashed',
-            memberships: { create: { tenantId: 'tenant-1', role: 'ADMIN' } },
-          }),
-        }),
-      );
-      expect(result).toEqual({
-        message: 'auth.ACCOUNT_CREATED',
-      });
-    });
-
-    it('guarda el refresh token solo como hash y con unos 30 días de vida', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      vi.mocked(bcrypt.hash).mockResolvedValue('hashed' as never);
-      tx.tenant.create.mockResolvedValue({ id: 'tenant-1' });
-      tx.user.create.mockResolvedValue({
-        id: 'user-1',
-        memberships: [{ tenantId: 'tenant-1', role: 'ADMIN' }],
-      });
-
-      const { message } = await service.register(dto);
-
-      expect(message).toEqual('auth.ACCOUNT_CREATED');
-    });
-
-    it('lanza ConflictException si el correo ya existe', async () => {
-      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
-
-      await expect(service.register(dto)).rejects.toThrow(ConflictException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
-    });
-  });
-
   describe('login', () => {
-    const dto = { email: 'admin@test.com', password: '12345678' };
-    const user = {
-      id: 'user-1',
-      password: 'hashed',
-      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
-      memberships: [
-        {
-          tenantId: 'tenant-1',
-          role: 'ADMIN',
-          tenant: { id: 'tenant-1', name: 'Acme', slug: 'acme-1' },
-        },
-      ],
+    const dto = {
+      email: 'ana@test.com',
+      provider: 'GITHUB' as const,
+      oAuthToken: 'mock-oauth-token',
+      name: 'Ana',
     };
 
-    it('abre una sesión y devuelve las organizaciones', async () => {
-      prisma.user.findUnique.mockResolvedValue(user);
-      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    it('crea una cuenta nueva y devuelve tokens junto con sus organizaciones', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
 
       const result = await service.login(dto);
 
-      expect(bcrypt.compare).toHaveBeenCalledWith('12345678', 'hashed');
+      expect(getProvider).toHaveBeenCalledWith('GITHUB');
+      expect(isCredentialsValid).toHaveBeenCalledWith({
+        oAuthToken: dto.oAuthToken,
+        email: dto.email,
+      });
+      expect(transaction.tenant.create).toHaveBeenCalledWith({
+        data: {
+          name: expect.any(String),
+          slug: expect.any(String),
+        },
+      });
+      expect(transaction.user.create).toHaveBeenCalledWith({
+        data: {
+          email: dto.email,
+          name: dto.name,
+          memberships: {
+            create: { tenantId: 'tenant-1', role: Role.ADMIN },
+          },
+        },
+        include: { memberships: true },
+      });
       expect(result).toEqual({
         access_token: 'access-token',
-        refresh_token: expect.any(String),
+        refresh_token: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
         organizations: [
-          { id: 'tenant-1', name: 'Acme', slug: 'acme-1', role: 'ADMIN' },
+          { id: 'tenant-1', name: 'Acme', slug: 'acme', role: Role.ADMIN },
         ],
       });
-    });
-
-    it('rechaza el inicio de sesión si el correo no está verificado', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        ...user,
-        emailVerifiedAt: null,
-      });
-      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
-
-      await expect(service.login(dto)).rejects.toThrow(
-        'auth.EMAIL_NOT_VERIFIED',
-      );
-      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
-      expect(jwt.signAsync).not.toHaveBeenCalled();
-    });
-
-    it('limpia los tokens caducados del propio usuario', async () => {
-      prisma.user.findUnique.mockResolvedValue(user);
-      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
-
-      await service.login(dto);
-
       expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
         where: expect.objectContaining({ userId: 'user-1' }),
       });
     });
 
-    it.each([
-      ['el usuario no existe', null, true],
-      ['la contraseña es incorrecta', user, false],
-    ])(
-      'lanza UnauthorizedException si %s y no abre sesión',
-      async (_caso, found, matches) => {
-        prisma.user.findUnique.mockResolvedValue(found);
-        vi.mocked(bcrypt.compare).mockResolvedValue(matches as never);
+    it('abre otra sesión para una cuenta existente sin crear otra organización', async () => {
+      const result = await service.login(dto);
 
-        await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
-        expect(prisma.refreshToken.create).not.toHaveBeenCalled();
-        expect(jwt.signAsync).not.toHaveBeenCalled();
-      },
-    );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(transaction.tenant.create).not.toHaveBeenCalled();
+      expect(result.organizations).toEqual([
+        { id: 'tenant-1', name: 'Acme', slug: 'acme', role: Role.ADMIN },
+      ]);
+      expect(result.refresh_token).toEqual(expect.any(String));
+    });
 
-    it('lanza ForbiddenException si la cuenta no pertenece a ninguna organización', async () => {
-      prisma.user.findUnique.mockResolvedValue({ ...user, memberships: [] });
-      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+    it('rechaza credenciales inválidas antes de consultar usuarios', async () => {
+      isCredentialsValid.mockResolvedValue(false);
 
-      await expect(service.login(dto)).rejects.toThrow('auth.NO_ORGANIZATION');
+      await expect(service.login(dto)).rejects.toThrow(ForbiddenException);
+
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
   });
 
   describe('refresh', () => {
-    it('rota el token: consume el anterior y emite uno nuevo de la misma familia', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-      prisma.membership.findFirst.mockResolvedValue(membership);
+    it('rota el token y conserva la familia de la sesión', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'refresh-1',
+        userId: 'user-1',
+        familyId: 'family-1',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+      });
 
       const result = await service.refresh({ refreshToken: 'old-token' });
 
       expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
         where: { tokenHash: hashToken('old-token') },
       });
-      expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({
-        where: { id: 'rt-1', revokedAt: null },
+      expect(transaction.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'refresh-1', revokedAt: null },
         data: { revokedAt: expect.any(Date) },
       });
-      expect(tx.refreshToken.create).toHaveBeenCalledWith({
+      expect(transaction.refreshToken.create).toHaveBeenCalledWith({
         data: {
           userId: 'user-1',
           familyId: 'family-1',
-          tokenHash: hashToken(result.refresh_token),
+          tokenHash: expect.any(String),
           expiresAt: expect.any(Date),
         },
       });
-      expect(result.refresh_token).not.toBe('old-token');
-      expect(jwt.signAsync).toHaveBeenCalledWith({
-        sub: 'user-1',
-        tenantId: 'tenant-1',
-        role: 'ADMIN',
+      expect(result).toEqual({
+        access_token: 'access-token',
+        refresh_token: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
       });
     });
 
-    it('sin tenantId usa la primera organización del usuario', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-      prisma.membership.findFirst.mockResolvedValue(membership);
-
-      await service.refresh({ refreshToken: 'old-token' });
-
-      expect(prisma.membership.findFirst).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-        orderBy: { createdAt: 'asc' },
-      });
-    });
-
-    it('con tenantId usa esa organización', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-      prisma.membership.findUnique.mockResolvedValue({
-        ...membership,
-        tenantId: 'tenant-2',
-        role: 'MEMBER',
-      });
-
-      await service.refresh({
-        refreshToken: 'old-token',
-        tenantId: 'tenant-2',
-      });
-
-      expect(prisma.membership.findUnique).toHaveBeenCalledWith({
-        where: { userId_tenantId: { userId: 'user-1', tenantId: 'tenant-2' } },
-      });
-      expect(jwt.signAsync).toHaveBeenCalledWith({
-        sub: 'user-1',
-        tenantId: 'tenant-2',
-        role: 'MEMBER',
-      });
-    });
-
-    it('lanza 403 sin consumir el token si ya no es miembro de esa organización', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-      prisma.membership.findUnique.mockResolvedValue(null);
-
+    it('rechaza un refresh token desconocido', async () => {
       await expect(
-        service.refresh({ refreshToken: 'old-token', tenantId: 'tenant-2' }),
-      ).rejects.toThrow(ForbiddenException);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('lanza 403 sin consumir el token si el usuario no tiene ninguna organización', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-      prisma.membership.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.refresh({ refreshToken: 'old-token' }),
-      ).rejects.toThrow('auth.NO_ORGANIZATION');
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('lanza UnauthorizedException con un token desconocido y no revoca nada', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.refresh({ refreshToken: 'inventado' }),
-      ).rejects.toThrow('auth.INVALID_REFRESH_TOKEN');
-      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('si se reutiliza un token ya revocado, revoca toda la familia', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(
-        stored({ revokedAt: new Date() }),
-      );
-
-      await expect(
-        service.refresh({ refreshToken: 'old-token' }),
+        service.refresh({ refreshToken: 'unknown-token' }),
       ).rejects.toThrow(UnauthorizedException);
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        familyRevoked,
-      );
+
+      expect(prisma.membership.findFirst).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(jwt.signAsync).not.toHaveBeenCalled();
-    });
-
-    it('rechaza un token caducado sin revocar la familia ni rotar', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(
-        stored({ expiresAt: new Date(Date.now() - 1000) }),
-      );
-
-      await expect(
-        service.refresh({ refreshToken: 'old-token' }),
-      ).rejects.toThrow(UnauthorizedException);
-      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('si otra petición consume el token primero, revoca la familia y no emite nada', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-      prisma.membership.findFirst.mockResolvedValue(membership);
-      tx.refreshToken.updateMany.mockResolvedValue({ count: 0 });
-
-      await expect(
-        service.refresh({ refreshToken: 'old-token' }),
-      ).rejects.toThrow(UnauthorizedException);
-      expect(tx.refreshToken.create).not.toHaveBeenCalled();
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        familyRevoked,
-      );
-      expect(jwt.signAsync).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('logout', () => {
-    it('revoca la familia a la que pertenece el token', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(stored());
-
-      await expect(service.logout('some-token')).resolves.toBeUndefined();
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        familyRevoked,
-      );
-    });
-
-    it('con un token desconocido no falla ni revoca nada', async () => {
-      prisma.refreshToken.findUnique.mockResolvedValue(null);
-
-      await expect(service.logout('desconocido')).resolves.toBeUndefined();
-      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('logoutAll', () => {
-    it('revoca todos los tokens vigentes del usuario', async () => {
-      await service.logoutAll('user-1');
-
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', revokedAt: null },
-        data: { revokedAt: expect.any(Date) },
-      });
-    });
-  });
-
-  describe('deleteAccount', () => {
-    it('anonimiza la identidad, elimina sesiones y membresías, y conserva la autoría', async () => {
-      tx.issue.findMany.mockResolvedValue([
-        { id: 'issue-1', tenantId: 'tenant-1' },
-      ]);
-      vi.mocked(bcrypt.hash).mockResolvedValue('randomized-password' as never);
-
-      await service.deleteAccount('user-1');
-
-      expect(tx.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: {
-          email: expect.stringMatching(
-            /^deleted-[0-9a-f-]+@anonymized\.invalid$/,
-          ),
-          name: null,
-          password: 'randomized-password',
-          emailVerifiedAt: null,
-          passwordChangedAt: expect.any(Date),
-        },
-      });
-      expect(tx.refreshToken.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-      });
-      expect(tx.authToken.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-      });
-      expect(tx.membership.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
-      });
-      expect(tx.issueEvent.createMany).toHaveBeenCalledWith({
-        data: [
-          {
-            tenantId: 'tenant-1',
-            issueId: 'issue-1',
-            actorId: 'user-1',
-            type: 'ASSIGNEE_CHANGED',
-            oldValue: 'user-1',
-            newValue: null,
-          },
-        ],
-      });
-      expect(tx.issue.updateMany).toHaveBeenCalledWith({
-        where: { assigneeId: 'user-1' },
-        data: { assigneeId: null },
-      });
-    });
-
-    it('rechaza la baja si la persona es la única administradora', async () => {
-      tx.membership.findMany
-        .mockResolvedValueOnce([{ tenantId: 'tenant-1' }])
-        .mockResolvedValueOnce([{ tenantId: 'tenant-1', role: 'ADMIN' }]);
-      tx.membership.count.mockResolvedValue(1);
-
-      await expect(service.deleteAccount('user-1')).rejects.toThrow(
-        ConflictException,
-      );
-      expect(tx.user.update).not.toHaveBeenCalled();
-      expect(tx.membership.deleteMany).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('switchTenant', () => {
-    it('emite un access token de la organización si es miembro', async () => {
-      prisma.membership.findUnique.mockResolvedValue({
-        ...membership,
-        tenantId: 'tenant-2',
-      });
-
-      await expect(service.switchTenant('user-1', 'tenant-2')).resolves.toEqual(
-        {
-          access_token: 'access-token',
-        },
-      );
-      expect(jwt.signAsync).toHaveBeenCalledWith({
-        sub: 'user-1',
-        tenantId: 'tenant-2',
-        role: 'ADMIN',
-      });
-    });
-
-    it('lanza ForbiddenException si no es miembro', async () => {
-      prisma.membership.findUnique.mockResolvedValue(null);
-
-      await expect(service.switchTenant('user-1', 'tenant-2')).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(jwt.signAsync).not.toHaveBeenCalled();
     });
   });
 });

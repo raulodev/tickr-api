@@ -1,9 +1,18 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { setupApp } from '../src/setup-app.js';
+
+const { getProvider } = vi.hoisted(() => {
+  const isCredentialsValid = vi.fn().mockResolvedValue(false);
+  return { getProvider: vi.fn(() => ({ isCredentialsValid })) };
+});
+
+vi.mock('../src/auth/providers/auth-provider.factory.js', () => ({
+  AuthProviderFactory: { getProvider },
+}));
 
 describe('Seguridad HTTP (e2e)', () => {
   let app: INestApplication;
@@ -20,9 +29,11 @@ describe('Seguridad HTTP (e2e)', () => {
   };
 
   const login = () =>
-    api()
-      .post('/api/auth/login')
-      .send({ email: 'nadie@test.com', password: '12345678' });
+    api().post('/api/auth/login').send({
+      email: 'nadie@test.com',
+      provider: 'GITHUB',
+      oAuthToken: 'mock-oauth-token',
+    });
 
   afterEach(async () => {
     await app.close();
@@ -108,7 +119,7 @@ describe('Seguridad HTTP (e2e)', () => {
 
   describe('límite de peticiones', () => {
     const exhaustLogin = async () => {
-      for (let i = 0; i < 5; i++) await login().expect(401);
+      for (let i = 0; i < 5; i++) await login().expect(403);
     };
 
     it('bloquea el login tras 5 intentos con 429 y mensaje en inglés', async () => {
@@ -136,15 +147,14 @@ describe('Seguridad HTTP (e2e)', () => {
       );
     });
 
-    it('el registro también tiene límite', async () => {
+    it('el límite del login se aplica antes de validar el cuerpo', async () => {
       process.env.THROTTLE_DISABLED = 'false';
       await createApp();
 
-      // El guard de límite se ejecuta antes que la validación: un cuerpo vacío también cuenta
       for (let i = 0; i < 5; i++) {
-        await api().post('/api/auth/register').send({}).expect(400);
+        await api().post('/api/auth/login').send({}).expect(400);
       }
-      await api().post('/api/auth/register').send({}).expect(429);
+      await api().post('/api/auth/login').send({}).expect(429);
     });
 
     it('agotar el login no afecta a otras rutas', async () => {
@@ -159,7 +169,7 @@ describe('Seguridad HTTP (e2e)', () => {
     it('con THROTTLE_DISABLED=true no limita', async () => {
       await createApp();
 
-      for (let i = 0; i < 8; i++) await login().expect(401);
+      for (let i = 0; i < 8; i++) await login().expect(403);
     });
   });
 });

@@ -1,43 +1,64 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
-import { overrideAuthMail } from '../e2e-test-helpers.js';
+import { setupApp } from '../../src/setup-app.js';
 
-describe('Auth (e2e)', () => {
+const { getProvider, isCredentialsValid } = vi.hoisted(() => {
+  const isCredentialsValid = vi.fn();
+  return {
+    isCredentialsValid,
+    getProvider: vi.fn(() => ({ isCredentialsValid })),
+  };
+});
+
+vi.mock('../../src/auth/providers/auth-provider.factory.js', () => ({
+  AuthProviderFactory: { getProvider },
+}));
+
+describe('Auth login (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
-  const validUser = {
-    tenantName: 'Mi Empresa',
-    email: 'admin@test.com',
-    password: '12345678',
-    name: 'Admin',
+  const api = () => request(app.getHttpServer());
+  const login = (body: object) => api().post('/api/auth/login').send(body);
+  const credentials = {
+    email: 'ana@test.com',
+    provider: 'GITHUB',
+    oAuthToken: 'mock-oauth-token',
+    name: 'Ana',
   };
 
-  const register = (body: object = validUser) =>
-    request(app.getHttpServer()).post('/api/auth/register').send(body);
-
   beforeAll(async () => {
-    const moduleRef = await overrideAuthMail(
-      Test.createTestingModule({
-        imports: [AppModule],
-      }),
-    ).compile();
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
 
     app = moduleRef.createNestApplication();
-    // Debe coincidir con la configuración de main.ts
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    setupApp(app);
     await app.init();
-
     prisma = app.get(PrismaService);
   });
 
   beforeEach(async () => {
+    vi.resetAllMocks();
+    getProvider.mockReturnValue({ isCredentialsValid });
+    isCredentialsValid.mockResolvedValue(true);
+    await prisma.issueEvent.deleteMany();
+    await prisma.comment.deleteMany();
     await prisma.issue.deleteMany();
     await prisma.project.deleteMany();
+    await prisma.membership.deleteMany();
     await prisma.user.deleteMany();
     await prisma.tenant.deleteMany();
   });
@@ -46,137 +67,74 @@ describe('Auth (e2e)', () => {
     await app.close();
   });
 
-  describe('POST /auth/register', () => {
-    it('crea el tenant y un usuario admin', async () => {
-      const res = await register().expect(201);
+  it('crea una cuenta y devuelve tokens y la organización inicial', async () => {
+    const response = await login(credentials).expect(200);
 
-      expect(res.body).toEqual({ message: expect.any(String) });
-
-      const user = await prisma.user.findUnique({
-        where: { email: validUser.email },
-        include: { memberships: { include: { tenant: true } } },
-      });
-      expect(user).not.toBeNull();
-      expect(user!.memberships[0].role).toBe('ADMIN');
-      expect(user!.memberships[0].tenant.name).toBe('Mi Empresa');
-      expect(user!.password).not.toBe(validUser.password); // guardada con hash
+    expect(getProvider).toHaveBeenCalledWith('GITHUB');
+    expect(isCredentialsValid).toHaveBeenCalledWith({
+      oAuthToken: credentials.oAuthToken,
+      email: credentials.email,
     });
-
-    it('crea un tenant distinto por cada registro', async () => {
-      await register().expect(201);
-      await register({
-        ...validUser,
-        tenantName: 'Otra Empresa',
-        email: 'otro@test.com',
-      }).expect(201);
-
-      const users = await prisma.user.findMany({
-        include: { memberships: true },
-      });
-      expect(users).toHaveLength(2);
-      expect(users[0].memberships[0].tenantId).not.toBe(
-        users[1].memberships[0].tenantId,
-      );
-    });
-
-    it('responde 409 si el correo ya está registrado', async () => {
-      await register().expect(201);
-      await register().expect(409);
-
-      expect(await prisma.tenant.count()).toBe(1); // no deja un tenant huérfano
-    });
-
-    it.each([
-      ['correo inválido', { ...validUser, email: 'no-es-un-correo' }],
-      ['contraseña corta', { ...validUser, password: '123' }],
-      ['sin nombre de organización', { ...validUser, tenantName: undefined }],
-    ])('responde 400 con %s', async (_caso, body) => {
-      await register(body).expect(400);
-      expect(await prisma.user.count()).toBe(0);
-    });
-  });
-
-  describe('POST /auth/login', () => {
-    beforeEach(async () => {
-      await register().expect(201);
-      await prisma.user.update({
-        where: { email: validUser.email },
-        data: { emailVerifiedAt: new Date() },
-      });
-    });
-
-    it('devuelve un token con credenciales válidas', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/api/auth/login')
-        .send({ email: validUser.email, password: validUser.password })
-        .expect(200);
-
-      expect(res.body.access_token).toEqual(expect.any(String));
-    });
-
-    it('responde 401 con contraseña incorrecta', async () => {
-      await request(app.getHttpServer())
-        .post('/api/auth/login')
-        .send({ email: validUser.email, password: 'incorrecta' })
-        .expect(401);
-    });
-
-    it('responde 401 si el usuario no existe', async () => {
-      await request(app.getHttpServer())
-        .post('/api/auth/login')
-        .send({ email: 'nadie@test.com', password: '12345678' })
-        .expect(401);
-    });
-
-    it('responde 400 con un cuerpo inválido', async () => {
-      await request(app.getHttpServer())
-        .post('/api/auth/login')
-        .send({ email: 'no-es-un-correo' })
-        .expect(400);
-    });
-  });
-
-  describe('GET /auth/me', () => {
-    it('responde 401 sin token', async () => {
-      await request(app.getHttpServer()).get('/api/auth/me').expect(401);
-    });
-
-    it('responde 401 con un token inválido', async () => {
-      await request(app.getHttpServer())
-        .get('/api/auth/me')
-        .set('Authorization', 'Bearer token-falso')
-        .expect(401);
-    });
-
-    it('devuelve sub, tenantId y role del token', async () => {
-      await register().expect(201);
-      const user = await prisma.user.findUniqueOrThrow({
-        where: { email: validUser.email },
-        include: { memberships: true },
-      });
-
-      await prisma.user.update({
-        where: { email: validUser.email },
-        data: {
-          emailVerifiedAt: new Date(),
+    expect(response.body).toMatchObject({
+      access_token: expect.any(String),
+      refresh_token: expect.any(String),
+      organizations: [
+        {
+          id: expect.any(String),
+          name: expect.any(String),
+          slug: expect.any(String),
+          role: 'ADMIN',
         },
-      });
+      ],
+    });
 
-      const { body } = await request(app.getHttpServer())
-        .post('/api/auth/login')
-        .send({ email: validUser.email, password: validUser.password })
-        .expect(200);
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: credentials.email },
+      include: { memberships: { include: { tenant: true } } },
+    });
+    expect(user.name).toBe('Ana');
+    expect(user.memberships).toHaveLength(1);
+    expect(user.memberships[0].tenant.id).toBe(
+      response.body.organizations[0].id,
+    );
+  });
 
-      const res = await request(app.getHttpServer())
-        .get('/api/auth/me')
-        .set('Authorization', `Bearer ${body.access_token}`)
-        .expect(200);
+  it('crea una sola cuenta al iniciar sesión de nuevo', async () => {
+    await login(credentials).expect(200);
+    const secondLogin = await login(credentials).expect(200);
 
-      expect(res.body).toMatchObject({
-        sub: user.id,
-        tenantId: user.memberships[0].tenantId,
-        role: 'ADMIN',
-      });
+    expect(await prisma.user.count()).toBe(1);
+    expect(await prisma.tenant.count()).toBe(1);
+    expect(secondLogin.body.refresh_token).toEqual(expect.any(String));
+  });
+
+  it('rechaza credenciales que el proveedor no valida y no crea una cuenta', async () => {
+    isCredentialsValid.mockResolvedValue(false);
+
+    await login(credentials).expect(403);
+
+    expect(await prisma.user.count()).toBe(0);
+    expect(await prisma.tenant.count()).toBe(0);
+  });
+
+  it('rechaza un cuerpo de login inválido', async () => {
+    await login({ email: 'invalid-email' }).expect(400);
+
+    expect(await prisma.user.count()).toBe(0);
+  });
+
+  it('el access token permite consultar la identidad y organización de la sesión', async () => {
+    const { body } = await login(credentials).expect(200);
+
+    const response = await api()
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${body.access_token}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      sub: expect.any(String),
+      tenantId: body.organizations[0].id,
+      role: 'ADMIN',
     });
   });
 });

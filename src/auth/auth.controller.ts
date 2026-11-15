@@ -13,7 +13,6 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
-  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiOkResponse,
@@ -32,31 +31,15 @@ import { AuthSessionResponseDto } from './dto/auth-session-response.dto.js';
 import { AuthUserResponseDto } from './dto/auth-user-response.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshDto, RefreshTokenDto } from './dto/refresh.dto.js';
-import { RegisterDto } from './dto/register.dto.js';
 import { SwitchTenantDto } from './dto/switch-tenant.dto.js';
-import { MessageResponseDto } from './dto/message-response.dto.js';
-import { TokenDto } from './dto/token.dto.js';
-import { EmailDto } from './dto/email.dto.js';
-import { ResetPasswordDto } from './dto/reset-password.dto.js';
 
 const AUTH_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 const REFRESH_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
-const MAIL_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
 
 @ApiTags('auth')
 @Controller('api/auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
-
-  @Throttle(AUTH_THROTTLE)
-  @Post('register')
-  @ApiCreatedResponse({ type: MessageResponseDto })
-  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
-  @ApiConflictResponse({ type: ApiErrorResponseDto })
-  @ApiTooManyRequestsResponse({ type: ApiErrorResponseDto })
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto);
-  }
 
   @Throttle(AUTH_THROTTLE)
   @Post('login')
@@ -130,41 +113,5 @@ export class AuthController {
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
   logoutAll(@CurrentUser() user: AuthUser) {
     return this.auth.logoutAll(user.sub);
-  }
-
-  @Throttle(AUTH_THROTTLE)
-  @Post('verify-email')
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: MessageResponseDto })
-  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
-  verifyEmail(@Body() dto: TokenDto) {
-    return this.auth.verifyEmail(dto.token);
-  }
-
-  @Throttle(MAIL_THROTTLE)
-  @Post('resend-verification')
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: MessageResponseDto })
-  @ApiTooManyRequestsResponse({ type: ApiErrorResponseDto })
-  resendVerification(@Body() dto: EmailDto) {
-    return this.auth.resendVerification(dto.email);
-  }
-
-  @Throttle(MAIL_THROTTLE)
-  @Post('forgot-password')
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: MessageResponseDto })
-  @ApiTooManyRequestsResponse({ type: ApiErrorResponseDto })
-  forgotPassword(@Body() dto: EmailDto) {
-    return this.auth.forgotPassword(dto.email);
-  }
-
-  @Throttle(AUTH_THROTTLE)
-  @Post('reset-password')
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: MessageResponseDto })
-  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.auth.resetPassword(dto);
   }
 }

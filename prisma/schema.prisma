@@ -22,20 +22,17 @@ model Tenant {
 }
 
 model User {
-  id                String         @id @default(uuid())
-  email             String         @unique
-  password          String
-  name              String?
-  createdAt         DateTime       @default(now())
-  emailVerifiedAt   DateTime?
-  passwordChangedAt DateTime?
-  memberships       Membership[]
-  reportedIssues    Issue[]        @relation("IssueReporter")
-  assignedIssues    Issue[]        @relation("IssueAssignee")
-  comments          Comment[]
-  issueEvents       IssueEvent[]
-  refreshTokens     RefreshToken[]
-  authTokens        AuthToken[]
+  id             String         @id @default(uuid())
+  email          String         @unique
+  name           String?
+  createdAt      DateTime       @default(now())
+  memberships    Membership[]
+  reportedIssues Issue[]        @relation("IssueReporter")
+  assignedIssues Issue[]        @relation("IssueAssignee")
+  comments       Comment[]
+  issueEvents    IssueEvent[]
+  refreshTokens  RefreshToken[]
+  authTokens     AuthToken[]
 }
 
 model Membership {
