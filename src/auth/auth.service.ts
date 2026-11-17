@@ -11,7 +11,6 @@ import { generateSlug } from '../common/slug.js';
 import { Prisma, Role } from '../generated/prisma/client.js';
 import { t } from '../i18n/t.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { AuthTokensService } from './auth-tokens.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshDto } from './dto/refresh.dto.js';
 import {
@@ -27,7 +26,6 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
-    private readonly tokens: AuthTokensService,
   ) {}
 
   /**
