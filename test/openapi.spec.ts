@@ -172,6 +172,10 @@ describe('OpenAPI', () => {
     expect(responseSchema(document, '/api/tenants', 'post', '201')).toEqual({
       $ref: '#/components/schemas/CreateTenantResponseDto',
     });
+    expect(responseSchema(document, '/api/tenants', 'get', '200')).toMatchObject({
+      type: 'array',
+      items: { $ref: '#/components/schemas/TenantOrganizationResponseDto' },
+    });
     expect(
       responseSchema(document, '/api/tenants/current/members', 'get', '200'),
     ).toMatchObject({

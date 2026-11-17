@@ -14,6 +14,7 @@ describe('TenantController', () => {
 
   const tenants = {
     create: vi.fn(),
+    list: vi.fn(),
     listMembers: vi.fn(),
     addMember: vi.fn(),
     removeMember: vi.fn(),
@@ -48,6 +49,14 @@ describe('TenantController', () => {
 
     await expect(controller.create(user, dto)).resolves.toBe(result);
     expect(tenants.create).toHaveBeenCalledWith(user.sub, dto);
+  });
+
+  it('lists organizations for the authenticated user', async () => {
+    const organizations = [{ id: 'tenant-1', role: Role.ADMIN }];
+    tenants.list.mockResolvedValue(organizations);
+
+    await expect(controller.list(user)).resolves.toBe(organizations);
+    expect(tenants.list).toHaveBeenCalledWith(user.sub);
   });
 
   it('lists members of the authenticated user organization', async () => {

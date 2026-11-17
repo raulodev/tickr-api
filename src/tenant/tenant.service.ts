@@ -49,6 +49,19 @@ export class TenantService {
     };
   }
 
+  async list(userId: string) {
+    const memberships = await this.prisma.membership.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      include: { tenant: { select: { id: true, name: true, slug: true } } },
+    });
+
+    return memberships.map((membership) => ({
+      ...membership.tenant,
+      role: membership.role,
+    }));
+  }
+
   async listMembers(tenantId: string) {
     const members = await this.prisma.membership.findMany({
       where: { tenantId },

@@ -123,6 +123,31 @@ describe('TenantService', () => {
     });
   });
 
+  describe('list', () => {
+    it('returns the user organizations in membership creation order', async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        {
+          role: Role.ADMIN,
+          tenant: { id: 'tenant-1', name: 'First', slug: 'first' },
+        },
+        {
+          role: Role.MEMBER,
+          tenant: { id: 'tenant-2', name: 'Second', slug: 'second' },
+        },
+      ]);
+
+      await expect(service.list('user-1')).resolves.toEqual([
+        { id: 'tenant-1', name: 'First', slug: 'first', role: Role.ADMIN },
+        { id: 'tenant-2', name: 'Second', slug: 'second', role: Role.MEMBER },
+      ]);
+      expect(prisma.membership.findMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+        orderBy: { createdAt: 'asc' },
+        include: { tenant: { select: { id: true, name: true, slug: true } } },
+      });
+    });
+  });
+
   describe('addMember', () => {
     const dto: AddMemberDto = { email: 'member@test.com' };
     const user = {

@@ -30,7 +30,10 @@ import { ApiErrorResponseDto } from '../common/dto/api-error-response.dto.js';
 import { Role } from '../generated/prisma/client.js';
 import { TenantService } from './tenant.service.js';
 import { CreateTenantDto } from './dto/create-tenant.dto.js';
-import { CreateTenantResponseDto } from './dto/create-tenant-response.dto.js';
+import {
+  CreateTenantResponseDto,
+  TenantOrganizationResponseDto,
+} from './dto/create-tenant-response.dto.js';
 import { AddMemberDto } from './dto/add-member.dto.js';
 import { ChangeRoleDto } from './dto/change-role.dto.js';
 import { TenantMemberResponseDto } from './dto/tenant-member-response.dto.js';
@@ -48,6 +51,13 @@ export class TenantController {
   @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTenantDto) {
     return this.tenants.create(user.sub, dto);
+  }
+
+  @Get()
+  @ApiOkResponse({ type: TenantOrganizationResponseDto, isArray: true })
+  @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+  list(@CurrentUser() user: AuthUser) {
+    return this.tenants.list(user.sub);
   }
 
   @Get('current/members')
